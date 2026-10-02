@@ -1,0 +1,22 @@
+import * as pool from './pool.js';
+import * as between from './between.js';
+import * as quiz from './quiz.js';
+import * as whot from './whot.js';
+import * as darts from './darts.js';
+import * as archery from './archery.js';
+import * as cuppong from './cuppong.js';
+import * as basketball from './basketball.js';
+import * as rps from './rps.js';
+import * as chess from './chess.js';
+import * as checkers from './checkers.js';
+import * as connect4 from './connect4.js';
+import * as battleship from './battleship.js';
+import * as reversi from './reversi.js';
+import * as dots from './dots.js';
+import * as mancala from './mancala.js';
+import * as gomoku from './gomoku.js';
+import * as tictactoe from './tictactoe.js';
+
+const list = [between, quiz, pool, darts, archery, cuppong, basketball, whot, chess, checkers, connect4, battleship, reversi, dots, mancala, gomoku, tictactoe, rps];
+export const games = Object.fromEntries(list.map((g) => [g.meta.id, g]));
+export const catalog = list.filter((g) => !g.meta.hidden).map((g) => g.meta);

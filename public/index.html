@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cut">
+  <title>LoveStep</title>
+  <meta name="description" content="LoveStep: games for two, from one link. Between Us, 8 Ball Pool, Whot, Chess, Checkers, Four in a Row, Sea Battle and more.">
+  <meta property="og:title" content="Your move. Come play with me on LoveStep">
+  <meta property="og:description" content="Tap the link to join my game. No sign-up, no download.">
+  <meta name="theme-color" content="#0f1512">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/vendor/geist/files/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/vendor/geist/wght.css">
+  <link rel="stylesheet" href="/vendor/geist-mono/wght.css">
+  <link rel="stylesheet" href="/vendor/phosphor/regular/style.css">
+  <link rel="stylesheet" href="/vendor/phosphor/fill/style.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/games.css">
+  <link rel="stylesheet" href="/css/between.css">
+  <script type="importmap">{ "imports": { "three": "/vendor/three/three.module.js", "three/addons/": "/vendor/three-addons/" } }</script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="invite-dialog" class="invite-dialog" aria-labelledby="inv-title">
+    <form method="dialog" class="name-form">
+      <div class="inv-head"><span class="inv-av" aria-hidden="true"></span><span class="inv-badge"><i class="ph-fill ph-paper-plane-tilt"></i>Invite</span></div>
+      <h2 id="inv-title" class="inv-title"></h2>
+      <p class="inv-sub"></p>
+      <div class="inv-actions">
+        <button class="btn btn-primary inv-go" value="ok"><i class="ph ph-play"></i><span>Play</span></button>
+        <button class="btn btn-quiet inv-no" value="no" formnovalidate>Not now</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/config.js"></script>
+  <script src="/vendor/socket.io/socket.io.min.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

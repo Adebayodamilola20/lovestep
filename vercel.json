@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node build.mjs",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci",
+  "framework": null,
+  "rewrites": [
+    { "source": "/r/:code", "destination": "/index.html" },
+    { "source": "/play/:game", "destination": "/index.html" },
+    { "source": "/between", "destination": "/index.html" },
+    { "source": "/between/:path*", "destination": "/index.html" },
+    { "source": "/me", "destination": "/index.html" },
+    { "source": "/quiz", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/vendor/(.*)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] },
+    { "source": "/config.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
+  ]
+}

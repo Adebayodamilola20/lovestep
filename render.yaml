@@ -1,0 +1,16 @@
+# The LoveStep game server (accounts, rooms, live play). The website itself is on Vercel.
+services:
+  - type: web
+    name: lovestep-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGODB_URI
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
