@@ -52,7 +52,8 @@ function syncChat(partner = me?.partner) {
   // The call button sits beside the chat: everyone you've played with is a contact.
   calls ??= new Calls({ socket, api: window.LS_API || '', me: () => me?.user, people: () => (me?.people ?? []).map((r) => r.person).filter((p) => p?.id), toast });
   calls.refresh();
-  chat ??= new Chat({ socket, meId: me.user.id, partner, copy: copyText, open: (code) => navigate('/r/' + code) });
+  chat ??= new Chat({ socket, meId: me.user.id, partner, copy: copyText, open: (code) => navigate('/r/' + code),
+    call: () => { const p = (me?.people ?? []).map((r) => r.person).find((x) => x?.id === chat?.them?.id); if (p) calls?.dial(p); } });
   chat.setPartner(partner);
 }
 
@@ -791,6 +792,9 @@ function openSettings() {
     <form class="sheet-body tool-form" id="acct">
       <div><label class="label" for="st-name">Username</label><input class="field" id="st-name" name="username" value="${esc(my.username)}" maxlength="20" autocapitalize="off"></div>
       <fieldset class="gender"><legend class="label">Gender</legend><div class="chips">${GENDERS.map(([v, l]) => `<button type="button" class="chip-g${my.gender === v ? ' on' : ''}" data-g="${v}">${l}</button>`).join('')}</div></fieldset>
+      <div><label class="label" for="st-phone">Phone number (for calls without data)</label>
+        <input class="field" id="st-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+234 801 234 5678" value="${esc(my.phone ?? '')}">
+        <small class="hint">Only people you play with can see it. When a LoveStep call can’t connect, they get a button to ring this number over normal phone signal.</small></div>
       <div><label class="label" for="st-subs">Movie subtitles</label>
         <select class="field" id="st-subs">${SUBTITLES.map(([v, l]) => `<option value="${v}"${(my.subs ?? '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
         <small class="hint">Used in Movie Night when the film has captions. You can also switch them with the CC button while watching.</small></div>
@@ -808,7 +812,7 @@ function openSettings() {
   }));
   dlg.querySelector('#acct').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const r = await emit('profile', { username: dlg.querySelector('#st-name').value.trim(), gender, subs: dlg.querySelector('#st-subs').value });
+    const r = await emit('profile', { username: dlg.querySelector('#st-name').value.trim(), gender, subs: dlg.querySelector('#st-subs').value, phone: dlg.querySelector('#st-phone').value });
     if (r.error) { dlg.querySelector('.auth-err').textContent = r.error; return; }
     me.user = { ...me.user, ...r.user };
     dlg.close();

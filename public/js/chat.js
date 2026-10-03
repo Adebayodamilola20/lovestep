@@ -10,11 +10,12 @@ const QUICK = ['Good luck', 'Nice shot', 'Your move', 'Rematch?', 'GG'];
  * There is one conversation per couple, shared by the home page and every game, and kept on the server.
  */
 export class Chat {
-  constructor({ socket, meId, partner, copy, open }) {
+  constructor({ socket, meId, partner, copy, open, call }) {
     this.socket = socket;
     this.meId = meId;
     this.copy = copy; // (text) => Promise<boolean>
     this.openLink = open; // (code) => void
+    this.callBack = call; // () => void: ring the person you're chatting with
     this.messages = [];
     this.unread = 0;
     this.them = null;
@@ -151,7 +152,7 @@ export class Chat {
       if (!this.isOpen) {
         this.unread++;
         this.renderBadge();
-        this.showBanner({ from: this.them.name, avatar: this.them.avatar, text: m.invite ? `Sent you a ${m.invite.game} link` : m.text });
+        this.showBanner({ from: this.them.name, avatar: this.them.avatar, text: m.call === 'missed' ? 'Missed call' : m.invite ? `Sent you a ${m.invite.game} link` : m.text });
         haptic(16);
       }
     }
@@ -159,6 +160,7 @@ export class Chat {
   }
 
   async onCardClick(e) {
+    if (e.target.closest('[data-callback]')) { this.close(); this.callBack?.(); return; }
     const btn = e.target.closest('[data-copy-code], [data-open-code]');
     if (!btn) return;
     const code = btn.dataset.copyCode || btn.dataset.openCode;
@@ -199,6 +201,14 @@ export class Chat {
   }
 
   bubble(m) {
+    if (m.call === 'missed') {
+      const when = new Date(m.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return `<div class="bubble call-note${m.mine ? ' mine' : ''}${m.fresh ? ' new' : ''}">
+        <span><i class="ph-fill ph-phone-x"></i>${m.mine ? `You called. ${esc(this.them?.name ?? 'They')} didn’t pick up` : `Missed call from ${esc(this.them?.name ?? 'them')}`}</span>
+        <small>${when}</small>
+        ${m.mine ? '' : '<button type="button" data-callback><i class="ph-fill ph-phone"></i>Call back</button>'}
+      </div>`;
+    }
     if (m.invite) {
       const url = `${location.origin}/r/${m.invite.code}`;
       return `<div class="bubble invite${m.mine ? ' mine' : ''}${m.fresh ? ' new' : ''}">

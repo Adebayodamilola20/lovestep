@@ -272,8 +272,8 @@ io.on('connection', (socket) => {
   socket.on('me', (...args) => {
     const cb = reply(args);
     if (!user) return cb({ auth: false });
-    const people = records.list(user.id).map((r) => ({ ...r, person: personOf(r.id) })).filter((r) => r.person.id);
-    cb({ user: personOf(user.id), partner: people[0]?.person ?? null, people });
+    const people = records.list(user.id).map((r) => ({ ...r, person: { ...personOf(r.id), phone: users.phoneOf(r.id) } })).filter((r) => r.person.id);
+    cb({ user: { ...personOf(user.id), phone: users.phoneOf(user.id) }, partner: people[0]?.person ?? null, people });
   });
 
   socket.on('profile', async (data, ...rest) => {
@@ -426,12 +426,22 @@ io.on('connection', (socket) => {
   }));
 
   /* ---------- voice calls: the server only rings and passes connection details; audio goes phone to phone ---------- */
+  const missed = (from, to) => {
+    const msg = { id: randomUUID(), from, text: '', call: 'missed', at: Date.now() };
+    const list = (threads[threadKey(from, to)] ??= []);
+    list.push(msg);
+    if (list.length > THREAD_MAX) list.splice(0, list.length - THREAD_MAX);
+    store.save('threads', threads);
+    for (const id of [from, to]) io.to('u:' + id).emit('dm', { ...msg, with: id === from ? to : from });
+  };
   socket.on('call:invite', guard(({ to, callId } = {}, cb) => {
     if (!okPartner(to)) return cb?.({ error: 'Nobody to call' });
-    if (!(online.get(to) > 0)) return cb?.({ error: 'offline' });
+    if (!(online.get(to) > 0)) { missed(uid(), to); return cb?.({ error: 'offline', phone: users.phoneOf(to) }); }
     io.to('u:' + to).emit('call:incoming', { from: personOf(uid()), callId: String(callId).slice(0, 64) });
-    cb?.({ ok: true });
+    cb?.({ ok: true, phone: users.phoneOf(to) });
   }));
+  // Rang out with no answer: leave a missed call in your chat.
+  socket.on('call:missed', guard(({ to } = {}) => { if (okPartner(to)) missed(uid(), to); }));
   // Answer, decline, hang up and the WebRTC handshake all pass straight through to the other person.
   for (const ev of ['call:accept', 'call:decline', 'call:end', 'call:signal', 'call:busy']) {
     socket.on(ev, guard(({ to, callId, data } = {}) => {

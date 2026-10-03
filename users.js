@@ -31,6 +31,7 @@ export function createUsers(store, db = {}) {
   return {
     publicUser,
     get: (id) => db.users[id] ?? null,
+    phoneOf: (id) => db.users[id]?.phone || null,
 
     signup({ username, password, gender }) {
       username = String(username || '').trim();
@@ -62,9 +63,15 @@ export function createUsers(store, db = {}) {
 
     logout(token) { delete db.sessions[token]; save(); },
 
-    update(id, { gender, username, subs }) {
+    update(id, { gender, username, subs, phone }) {
       const u = db.users[id];
       if (!u) throw new Error('No account');
+      // A normal phone number, shown only to the people you play with, for "call her phone instead".
+      if (phone !== undefined) {
+        const p = String(phone).replace(/[\s()-]/g, '');
+        if (p && !/^\+?\d{7,15}$/.test(p)) throw new Error('Phone numbers are digits, with an optional + at the start (e.g. +2348012345678).');
+        u.phone = p;
+      }
       // Subtitle language for Movie Night ('' = off).
       if (subs !== undefined) u.subs = SUBS.includes(subs) ? subs : '';
       if (gender !== undefined) u.gender = GENDERS.includes(gender) ? gender : 'unsaid';

@@ -59,9 +59,9 @@ export class Calls {
     const on = (ev, fn) => { socket.on(ev, fn); (this.offs ??= []).push(() => socket.off(ev, fn)); };
     on('call:incoming', (m) => this.incoming(m));
     on('call:accept', (m) => this.mine(m) && this.accepted());
-    on('call:decline', (m) => this.mine(m) && this.finish('Declined'));
+    on('call:decline', (m) => this.mine(m) && this.finish('Declined', false, true));
     on('call:busy', (m) => this.mine(m) && this.finish('On another call'));
-    on('call:end', (m) => this.mine(m) && this.finish('Call ended'));
+    on('call:end', (m) => this.mine(m) && this.finish(this.call.state === 'ringing' && this.call.dir === 'in' ? 'Missed call' : 'Call ended'));
     on('call:taken', (m) => this.mine(m) && this.call.dir === 'in' && this.call.state === 'ringing' && this.finish('Answered on another device', true));
     on('call:signal', (m) => this.mine(m) && this.signal(m.data));
     // Our own connection to the server comes back: if the call dropped, try to rejoin it.
@@ -92,18 +92,24 @@ export class Calls {
   async dial(person) {
     if (this.call) return;
     haptic(10);
-    this.call = { id: crypto.randomUUID?.() ?? String(Math.random()).slice(2), dir: 'out', with: person, state: 'calling', muted: false, big: true };
+    this.call = { id: crypto.randomUUID?.() ?? String(Math.random()).slice(2), dir: 'out', with: person, phone: person.phone, state: 'calling', muted: false, big: true };
     this.render();
     // Ask for the microphone first, from the tap itself (browsers require that).
     if (!(await this.mic())) return;
     const res = await new Promise((r) => this.socket.timeout(8000).emit('call:invite', { to: person.id, callId: this.call?.id }, (err, v) => r(err ? { error: 'timeout' } : v)));
     if (!this.call) return;
-    if (res?.error === 'offline') return this.finish(`${person.username} isn’t on LoveStep right now`);
+    if (this.call && res?.phone) this.call.phone = res.phone;
+    if (res?.error === 'offline') return this.finish(`${person.username} isn’t on LoveStep right now, so the call can’t reach them. We left them a missed call in your chat.`, false, true);
     if (res?.error) return this.finish(res.error === 'timeout' ? 'Couldn’t reach the server. Check your connection.' : res.error);
     this.set('ringing');
     this.tone = ringer('out');
     this.tone.start();
-    this.call.ringTimer = setTimeout(() => { if (this.call?.state === 'ringing') { this.emit('call:end'); this.finish('No answer'); } }, RING_MS);
+    this.call.ringTimer = setTimeout(() => {
+      if (this.call?.state !== 'ringing') return;
+      this.emit('call:end');
+      this.socket.emit('call:missed', { to: person.id });
+      this.finish('No answer', false, true);
+    }, RING_MS);
   }
 
   incoming({ from, callId }) {
@@ -124,7 +130,12 @@ export class Calls {
   }
 
   decline() { this.tone?.stop(); this.emit('call:decline'); this.finish('Declined', true); }
-  hangup() { this.emit('call:end'); this.finish('Call ended'); }
+  hangup() {
+    const ringing = this.call?.dir === 'out' && ['calling', 'ringing'].includes(this.call.state);
+    this.emit('call:end');
+    if (ringing && this.call.state === 'ringing') this.socket.emit('call:missed', { to: this.call.with.id });
+    this.finish(ringing ? 'Cancelled' : 'Call ended', ringing);
+  }
   emit(ev, data) { if (this.call) this.socket.emit(ev, { to: this.call.with.id, callId: this.call.id, data }); }
 
   async mic() {
@@ -223,7 +234,8 @@ export class Calls {
 
   set(state) { if (!this.call) return; this.call.state = state; this.render(); }
 
-  finish(reason, quiet = false) {
+  /** End the call. `options` keeps the screen up with Call again / Call phone / Close. */
+  finish(reason, quiet = false, options = false) {
     if (!this.call) return;
     clearTimeout(this.call.ringTimer);
     clearTimeout(this.call.lostTimer);
@@ -234,11 +246,15 @@ export class Calls {
     this.audio.srcObject = null;
     this.pendingIce = [];
     const was = this.call;
-    was.state = 'ended'; was.reason = reason; was.big = true;
+    was.state = 'ended'; was.reason = reason; was.big = true; was.options = options && was.dir === 'out';
     this.render();
     if (!quiet) haptic([20, 40, 20]);
-    setTimeout(() => { if (this.call === was) { this.call = null; this.ui.hidden = true; this.refresh(); } }, quiet ? 600 : 1800);
+    // A normal hang-up closes by itself; a failed call waits for you to choose.
+    clearTimeout(this.closeTimer);
+    this.closeTimer = setTimeout(() => { if (this.call === was) this.close(); }, was.options ? 20000 : quiet ? 600 : 1800);
   }
+
+  close() { clearTimeout(this.closeTimer); this.call = null; this.ui.hidden = true; this.ui.className = 'call'; this.ui.innerHTML = ''; this.refresh(); }
 
   /* ---------- the call screen ---------- */
   label() {
@@ -253,7 +269,7 @@ export class Calls {
     const c = this.call;
     this.refresh();
     clearInterval(this.clock);
-    if (!c) { this.ui.hidden = true; return; }
+    if (!c) { this.ui.hidden = true; this.ui.className = 'call'; this.ui.innerHTML = ''; return; }
     this.ui.hidden = false;
     this.ui.className = `call ${c.big ? 'big' : 'mini'} st-${c.state}`;
     if (!c.big) {
@@ -268,12 +284,20 @@ export class Calls {
             <span class="call-ring">${avatarHtml(c.with, 'xl')}</span>
             <b>${esc(c.with.username)}</b>
             <span class="call-state num" aria-live="polite">${this.label()}</span>
+            ${c.state === 'ended' && c.options ? `<small class="call-hint">${c.phone ? `“Call phone” rings ${esc(c.with.username)}’s normal number. It works on phone signal, no data needed (normal call charges).` : `Add phone numbers in your profiles to get a “Call phone” button that works on signal alone.`}</small>` : ''}
           </div>
           <div class="call-actions">
             ${ringingIn ? `
               <button class="call-btn decline" type="button" data-decline><i class="ph-fill ph-phone-disconnect"></i><small>Decline</small></button>
               <button class="call-btn accept" type="button" data-accept><i class="ph-fill ph-phone"></i><small>Accept</small></button>`
-            : c.state === 'ended' ? '' : `
+            : c.state === 'ended' ? (c.options ? `
+              <button class="call-btn" type="button" data-close><i class="ph ph-x"></i><small>Close</small></button>
+              <button class="call-btn accept" type="button" data-again><i class="ph-fill ph-phone"></i><small>Call again</small></button>
+              ${c.phone ? `<a class="call-btn cell" href="tel:${esc(c.phone)}" data-tel><i class="ph-fill ph-device-mobile"></i><small>Call phone</small></a>` : ''}` : `
+              <button class="call-btn" type="button" data-close><i class="ph ph-x"></i><small>Close</small></button>`)
+            : c.dir === 'out' && (c.state === 'calling' || c.state === 'ringing') ? `
+              <button class="call-btn${c.muted ? ' on' : ''}" type="button" data-mute><i class="ph-fill ${c.muted ? 'ph-microphone-slash' : 'ph-microphone'}"></i><small>${c.muted ? 'Unmute' : 'Mute'}</small></button>
+              <button class="call-btn decline" type="button" data-end><i class="ph-fill ph-phone-disconnect"></i><small>Cancel</small></button>` : `
               <button class="call-btn${c.muted ? ' on' : ''}" type="button" data-mute><i class="ph-fill ${c.muted ? 'ph-microphone-slash' : 'ph-microphone'}"></i><small>${c.muted ? 'Unmute' : 'Mute'}</small></button>
               <button class="call-btn${c.speaker ? ' on' : ''}" type="button" data-speaker><i class="ph-fill ph-speaker-high"></i><small>Speaker</small></button>
               <button class="call-btn decline" type="button" data-end><i class="ph-fill ph-phone-disconnect"></i><small>End</small></button>`}
@@ -286,6 +310,10 @@ export class Calls {
       q('[data-mute]')?.addEventListener('click', () => this.mute());
       q('[data-speaker]')?.addEventListener('click', () => this.speaker());
       q('.call-min')?.addEventListener('click', () => this.shrink());
+      q('[data-close]')?.addEventListener('click', () => this.close());
+      q('[data-again]')?.addEventListener('click', () => { const who = c.with; this.close(); this.dial(who); });
+      q('[data-tel]')?.addEventListener('click', () => setTimeout(() => this.close(), 400));
+
     }
     // Tick the call timer.
     if (c.state === 'connected') this.clock = setInterval(() => { const t = this.ui.querySelector('.call-state, .t'); if (t) t.textContent = this.label(); }, 1000);
