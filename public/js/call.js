@@ -7,6 +7,22 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const RING_MS = 40000; // give up if nobody answers
 
+/**
+ * Voice tuned for bad networks: ~24 kbps mono Opus (a quarter of the default) with in-band
+ * forward error correction, so a lost packet is rebuilt from the next one, and DTX, which sends
+ * almost nothing during silence. Stays clear on weak 2G/3G.
+ */
+const VOICE_KBPS = 24;
+function tuneSdp(sdp) {
+  const pt = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
+  if (!pt) return sdp;
+  const want = `useinbandfec=1;usedtx=1;stereo=0;sprop-stereo=0;maxaveragebitrate=${VOICE_KBPS * 1000};maxplaybackrate=24000`;
+  const line = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+  return line.test(sdp)
+    ? sdp.replace(line, (_, params) => `a=fmtp:${pt} ${[...new Set([...params.split(';').filter((x) => !/^(useinbandfec|usedtx|stereo|sprop-stereo|maxaveragebitrate|maxplaybackrate)=/.test(x)), ...want.split(';')])].join(';')}`)
+    : sdp.replace(`a=rtpmap:${pt} opus/48000/2`, `a=rtpmap:${pt} opus/48000/2\r\na=fmtp:${pt} ${want}`);
+}
+
 /** A soft two-tone ring made in the browser, so there's no sound file to download. */
 function ringer(kind) {
   let ctx = null, timer = 0;
@@ -161,8 +177,19 @@ export class Calls {
     if (!this.call) return;
     const pc = this.pc = new RTCPeerConnection({ iceServers });
     this.call.caller = caller;
-    this.local.getTracks().forEach((t) => pc.addTrack(t, this.local));
-    pc.ontrack = (e) => { this.audio.srcObject = e.streams[0]; this.audio.play().catch(() => {}); };
+    this.local.getTracks().forEach((t) => {
+      const sender = pc.addTrack(t, this.local);
+      // Keep the voice small and ask the phone to send it before anything else.
+      const p = sender.getParameters();
+      p.encodings = [{ ...(p.encodings?.[0] ?? {}), maxBitrate: VOICE_KBPS * 1000, priority: 'high', networkPriority: 'high' }];
+      sender.setParameters(p).catch(() => {});
+    });
+    pc.ontrack = (e) => {
+      // A slightly deeper buffer smooths out a shaky line (Chrome/Android honour this).
+      try { e.receiver.jitterBufferTarget = 120; } catch { /* not supported */ }
+      this.audio.srcObject = e.streams[0];
+      this.audio.play().catch(() => {});
+    };
     pc.onicecandidate = (e) => { if (e.candidate) this.emit('call:signal', { ice: e.candidate }); };
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
@@ -174,7 +201,7 @@ export class Calls {
 
   async offer(iceRestart = false) {
     const offer = await this.pc.createOffer({ iceRestart });
-    await this.pc.setLocalDescription(offer);
+    await this.pc.setLocalDescription({ type: 'offer', sdp: tuneSdp(offer.sdp) });
     this.emit('call:signal', { sdp: this.pc.localDescription });
   }
 
@@ -186,7 +213,8 @@ export class Calls {
       if (data.sdp) {
         await pc.setRemoteDescription(data.sdp);
         if (data.sdp.type === 'offer') {
-          await pc.setLocalDescription(await pc.createAnswer());
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription({ type: 'answer', sdp: tuneSdp(answer.sdp) });
           this.emit('call:signal', { sdp: pc.localDescription });
         }
         for (const c of this.pendingIce ?? []) await pc.addIceCandidate(c).catch(() => {});
