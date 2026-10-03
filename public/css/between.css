@@ -472,3 +472,19 @@ body.net-offline #stage { pointer-events: none; filter: saturate(0.4) brightness
 .mv-about { margin-top: var(--space-md); padding: var(--space-md); border-radius: var(--radius-lg); background: var(--color-paper-2); border: 1px solid var(--color-rule); }
 .mv-about span { color: var(--color-ink-3); font-size: var(--text-sm); }
 .mv-about p { margin: 6px 0 0; color: var(--color-ink-2); }
+.mv-search { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: var(--space-md); }
+.mv-search .ph { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--color-ink-3); font-size: 18px; pointer-events: none; }
+.mv-search .field { padding-left: 40px; }
+.mv-shelf { margin-bottom: var(--space-lg); }
+.mv-shelf h3 { margin: 0 0 10px; font: 700 var(--text-lg)/1.1 var(--font-display); letter-spacing: -0.02em; }
+.mv-row-scroll { display: grid; grid-auto-flow: column; grid-auto-columns: min(72%, 260px); gap: var(--space-sm); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; padding-bottom: 6px; margin-right: calc(-1 * clamp(12px, 3vw, 24px)); scrollbar-width: none; }
+.mv-row-scroll::-webkit-scrollbar { display: none; }
+.mv-row-scroll .mv-card { scroll-snap-align: start; }
+.mv-results .mv-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.mv-thumb { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: var(--color-paper-3); box-shadow: 0 12px 22px -14px oklch(5% 0.02 60 / 0.8); }
+.mv-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mv-thumb i { position: absolute; right: 6px; bottom: 6px; padding: 3px 6px; border-radius: 6px; background: oklch(0% 0 0 / 0.75); color: #fff; font: 600 11px/1 var(--font-mono); font-style: normal; }
+.mv-card.picked .mv-thumb { box-shadow: 0 0 0 3px var(--color-accent); }
+.mv-meta b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
+.mv-loading { display: flex; align-items: center; gap: 10px; color: var(--color-ink-2); }
+.mv-loading .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--color-paper-4); border-top-color: var(--color-ink); animation: spin 800ms linear infinite; }

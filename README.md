@@ -51,5 +51,6 @@ The site is two parts:
 - **Game server** (`server.js`) on **Render**: accounts, rooms and live play over Socket.io. `render.yaml` describes it.
   Set `MONGODB_URI` (a MongoDB Atlas connection string) so data survives restarts, and `CORS_ORIGIN` to the website's address.
 - **Website** (`public/`, built by `build.mjs` into `dist/`) on **Vercel**. Set `API_URL` to the Render server's address, e.g. `https://lovestep-api.onrender.com`.
+- **Movie Night** searches YouTube for full films on the server; set `YOUTUBE_API_KEY` on Render (and in an untracked `.env` locally).
 
 Locally, `npm run dev` serves both from one place and keeps data in `./data`.

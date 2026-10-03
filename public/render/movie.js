@@ -1,4 +1,4 @@
-import { FILMS, film as filmById, youtubeId } from '/shared/games/movie.js';
+import { film as filmById, youtubeId } from '/shared/games/movie.js';
 import { haptic } from '/js/fx.js';
 import { avatarHtml } from '/js/auth.js';
 
@@ -8,6 +8,23 @@ const clock = (t) => {
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
   return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(s).padStart(2, '0')}`;
 };
+// YouTube titles shout and repeat themselves; keep the film's name and the cast.
+function tidy(t) {
+  let out = String(t || '').replace(/\s*[|\-–:]*\s*(latest\s+)?(nigerian|nollywood|yoruba|ghanaian|african)\s+movies?\b.*$/i, '')
+    .replace(/\s*[({\[]?\s*(full|new|latest)\s+(nollywood\s+)?movie\s*[)}\]]?/ig, ' ').replace(/\s*[-–|:]\s*[-–|:]\s*/g, ' - ').replace(/\s{2,}/g, ' ').trim().replace(/[\s\-|–:,]+$/, '');
+  out = out.replace(/[{}\[\]]/g, '');
+  if ((out.match(/\(/g) || []).length !== (out.match(/\)/g) || []).length) out = out.replace(/[()]/g, '');
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  if (!out) out = String(t || '');
+  // ALL CAPS -> Title Case, so it reads like a film title.
+  if (out.replace(/[^A-Za-z]/g, '').length > 4 && out === out.toUpperCase()) out = out.toLowerCase().replace(/(^|[\s(\-/,])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+  return out;
+}
+function ago(iso) {
+  const d = (Date.now() - Date.parse(iso)) / 86400000;
+  if (!(d >= 0)) return '';
+  return d < 1 ? 'today' : d < 2 ? 'yesterday' : d < 30 ? `${Math.floor(d)} days ago` : d < 365 ? `${Math.floor(d / 30)} mo ago` : `${Math.floor(d / 365)} yr ago`;
+}
 const DRIFT = 1.2; // seconds out of step before we quietly jump back in line
 
 /** The YouTube player API, loaded once, only when someone picks a YouTube link. */
@@ -29,6 +46,7 @@ export function mount(el, ctx) {
   const root = el.firstElementChild;
   let s = null, meta = null, offset = 0, player = null, shownKey = null, applying = 0, timer = 0, needsTap = false;
 
+  root.addEventListener('click', (e) => onPick(e)); // film cards, bound once for every studio redraw
   const me = () => meta.you;
   const isHost = () => me() === 0;
   const partner = () => meta.players[1 - me()];
@@ -36,42 +54,53 @@ export function mount(el, ctx) {
   // Where the film should be right now, for both of you.
   const expected = () => s.t + (s.playing ? (serverNow() - s.at) / 1000 : 0);
 
-  /* ---------- the studio ---------- */
+  /* ---------- the studio: full films from YouTube, newest first ---------- */
+  const api = (path) => fetch((window.LS_API || '') + path).then((r) => r.json());
+  let shelvesCache = null;
+
   function studio() {
-    const p = partner();
-    const who = p ? esc(p.name) : 'your partner';
+    const host = isHost();
     root.innerHTML = `
       ${top()}
       <section class="mv-studio">
         <header class="mv-head">
-          <h2>${isHost() ? 'Pick tonight’s film' : `${esc(meta.players[0]?.name ?? 'Your partner')} is picking a film…`}</h2>
-          <p>${isHost() ? `When you press play, it plays for ${who} too. Pause, skip back or jump ahead, and you both stay in step.` : 'It starts on your screen the moment they pick. Either of you can pause or skip.'}</p>
+          <h2>${host ? 'Pick tonight’s film' : `${esc(meta.players[0]?.name ?? 'Your partner')} is picking a film…`}</h2>
+          <p>${host ? 'Full movies, newest first. When you press play it plays on both phones, and either of you can pause or skip.' : 'It starts on your screen the moment they pick. Either of you can pause or skip.'}</p>
         </header>
-        <div class="mv-grid${isHost() ? '' : ' locked'}">
-          ${FILMS.map((f) => `
-            <button class="mv-card" type="button" data-film="${f.id}" ${isHost() ? '' : 'disabled'}>
-              <span class="mv-poster" data-genre="${esc(f.genre.split(' ').pop().toLowerCase())}">
-                <b>${esc(f.title)}</b><small>${f.year}</small>
-                <img src="${f.poster}" alt="" loading="lazy" onerror="this.remove()" onload="this.classList.add('in')">
-              </span>
-              <span class="mv-meta"><b>${esc(f.title)}</b><small>${f.year} · ${esc(f.genre)} · ${f.mins} min</small></span>
-            </button>`).join('')}
-        </div>
-        ${isHost() ? `
+        <form class="mv-search" role="search">
+          <i class="ph ph-magnifying-glass"></i>
+          <input class="field" id="mv-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Search a title or actor">
+          <button class="btn btn-primary" type="submit">Search</button>
+        </form>
+        <div class="mv-results" aria-live="polite"></div>
+        <div class="mv-shelves"><p class="mv-loading"><span class="spin"></span>Finding the newest films…</p></div>
+        ${host ? `
           <form class="mv-yt">
-            <label for="mv-yt-url"><i class="ph-fill ph-youtube-logo"></i>Or paste a YouTube link</label>
-            <div><input class="field" id="mv-yt-url" inputmode="url" autocomplete="off" placeholder="https://youtu.be/…"><button class="btn btn-primary" type="submit">Watch</button></div>
+            <label for="mv-yt-url"><i class="ph-fill ph-youtube-logo"></i>Have a link? Paste any YouTube video</label>
+            <div><input class="field" id="mv-yt-url" inputmode="url" autocomplete="off" placeholder="https://youtu.be/…"><button class="btn" type="submit">Watch</button></div>
             <p class="mv-err" role="alert"></p>
           </form>` : ''}
-        <p class="mv-note">Films here are public domain or Creative Commons, streamed from the Internet Archive.</p>
+        <p class="mv-note">Films come from the official YouTube channels that released them.</p>
       </section>`;
     bindTop();
-    root.querySelectorAll('[data-film]').forEach((b) => b.addEventListener('click', async () => {
-      haptic(10);
-      b.classList.add('picked');
-      const r = await ctx.send({ type: 'pick', film: b.dataset.film });
-      if (r?.error) b.classList.remove('picked');
-    }));
+    const shelvesEl = root.querySelector('.mv-shelves'), resultsEl = root.querySelector('.mv-results');
+    const paint = (data) => {
+      if (data.error) { shelvesEl.innerHTML = `<p class="mv-err">Couldn’t load films right now (${esc(data.error)}). Paste a YouTube link below instead.</p>`; return; }
+      shelvesEl.innerHTML = data.shelves.map((sh) => `
+        <section class="mv-shelf"><h3>${esc(sh.title)}</h3><div class="mv-row-scroll">${sh.items.map(card).join('')}</div></section>`).join('');
+    };
+    if (shelvesCache) paint(shelvesCache);
+    else api('/api/movies/shelves').then((d) => { if (!d.error) shelvesCache = d; if (shelvesEl.isConnected) paint(d); }).catch(() => paint({ error: 'no connection' }));
+    root.querySelector('.mv-search').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = root.querySelector('#mv-q').value.trim();
+      if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+      resultsEl.innerHTML = '<p class="mv-loading"><span class="spin"></span>Searching…</p>';
+      const d = await api('/api/movies/search?q=' + encodeURIComponent(q)).catch(() => ({ error: 'no connection' }));
+      resultsEl.innerHTML = d.error ? `<p class="mv-err">${esc(d.error)}</p>`
+        : d.items.length ? `<section class="mv-shelf"><h3>Results for “${esc(q)}”</h3><div class="mv-grid">${d.items.map(card).join('')}</div></section>`
+        : `<p class="mv-err">No full movies found for “${esc(q)}”. Try an actor’s name.</p>`;
+    });
     root.querySelector('.mv-yt')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const url = root.querySelector('#mv-yt-url').value, err = root.querySelector('.mv-err');
@@ -79,6 +108,25 @@ export function mount(el, ctx) {
       const r = await ctx.send({ type: 'pick', yt: url, title: 'YouTube video' });
       if (r?.error) err.textContent = r.error;
     });
+  }
+
+  async function onPick(e) {
+    const b = e.target.closest('[data-yt]');
+    if (!b || !isHost() || !root.contains(b)) return;
+    haptic(10);
+    b.classList.add('picked');
+    const r = await ctx.send({ type: 'pick', yt: b.dataset.yt, title: b.dataset.title });
+    if (r?.error) b.classList.remove('picked');
+  }
+
+  function card(m) {
+    const title = tidy(m.title);
+    const len = m.mins ? (m.mins >= 60 ? `${Math.floor(m.mins / 60)}h ${m.mins % 60}m` : `${m.mins}m`) : '';
+    const age = ago(m.published);
+    return `<button class="mv-card" type="button" data-yt="${esc(m.id)}" data-title="${esc(title)}" ${isHost() ? '' : 'disabled'}>
+      <span class="mv-thumb"><img src="${esc(m.thumb)}" alt="" loading="lazy">${len ? `<i class="num">${len}</i>` : ''}</span>
+      <span class="mv-meta"><b>${esc(title)}</b><small>${esc(m.channel)}${age ? ` · ${age}` : ''}</small></span>
+    </button>`;
   }
 
   function top() {
@@ -122,6 +170,7 @@ export function mount(el, ctx) {
           </div>
           <p class="mv-who" aria-live="polite"></p>
         </div>
+        ${s.yt ? `<div class="mv-about"><b>${esc(s.title || 'YouTube video')}</b> <span>on YouTube</span><p>${isHost() ? 'Tap the film strip button to go back to the studio and pick something else.' : 'Either of you can pause, skip back or jump ahead.'}</p></div>` : ''}
         ${f ? `<div class="mv-about"><b>${esc(f.title)}</b> <span>${f.year} · ${esc(f.genre)} · ${f.mins} min</span><p>${esc(f.blurb)}</p></div>` : ''}
       </section>`;
     bindTop();
@@ -182,6 +231,12 @@ export function mount(el, ctx) {
         playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
         events: {
           onReady: () => { ready = true; apply(); },
+          onError: (e) => {
+            // 101 / 150: the channel doesn't allow this film to play outside YouTube.
+            const msg = e.data === 101 || e.data === 150 ? 'This film’s owner only allows it on YouTube itself.' : 'This video couldn’t be played.';
+            const tap = root.querySelector('.mv-tap');
+            if (tap) { tap.hidden = false; tap.innerHTML = `<i class="ph-fill ph-warning-circle"></i><b>${msg}</b><small>${isHost() ? 'Tap to pick another film.' : 'Ask them to pick another.'}</small>`; tap.onclick = () => { if (isHost()) ctx.send({ type: 'close' }); }; }
+          },
           onStateChange: (e) => {
             if (applying) return;
             if (e.data === 1 && !s.playing) ctx.send({ type: 'play', t: yp.getCurrentTime() });

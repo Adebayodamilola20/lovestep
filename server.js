@@ -12,6 +12,13 @@ import { createUsers } from './users.js';
 import { createStore } from './store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+// Local secrets (e.g. YOUTUBE_API_KEY) live in an untracked .env; on Render they're set in the dashboard.
+try {
+  for (const line of (await import('node:fs')).readFileSync(root + '.env', 'utf8').split('\n')) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+} catch { /* no .env: fine */ }
 const store = await createStore(root + 'data');
 const users = createUsers(store, await store.load('users', {}));
 const records = createRecords(store, await store.load('records', {}));
@@ -33,6 +40,64 @@ app.get('/avatars/:file', async (req, res) => {
 const vendor = { 'socket.io': 'socket.io/client-dist', three: 'three/build', 'three-addons': 'three/examples/jsm', geist: '@fontsource-variable/geist', 'geist-mono': '@fontsource-variable/geist-mono', phosphor: '@phosphor-icons/web/src' };
 for (const [name, dir] of Object.entries(vendor)) app.use(`/vendor/${name}`, express.static(root + 'node_modules/' + dir, { maxAge: '7d' }));
 app.get(['/r/:code', '/play/:game', '/between', '/between/:mode', '/between/c/:id', '/me', '/quiz'], (_req, res) => res.sendFile(root + 'public/index.html'));
+/* ---------- Movie Night: full films from YouTube ----------
+ * Searches run here so the API key never reaches the browser, and results are cached:
+ * a search costs 100 of the free 10,000 daily units. */
+const YT = 'https://www.googleapis.com/youtube/v3/';
+const SHELVES = [
+  { id: 'new', title: 'New Nollywood', q: 'nollywood full movie 2026 latest', order: 'date' },
+  { id: 'romance', title: 'Romance', q: 'nigerian romantic movie 2026 full movie', order: 'relevance' },
+  { id: 'yoruba', title: 'Yoruba movies', q: 'yoruba movie 2026 full latest', order: 'date' },
+  { id: 'comedy', title: 'Comedy', q: 'nigerian comedy movie 2026 full movie', order: 'relevance' },
+  { id: 'ghana', title: 'Ghana & Africa', q: 'ghanaian movie 2026 full movie latest', order: 'date' },
+];
+const ytCache = new Map(); // key -> { at, data }
+async function ytSearch(q, order = 'relevance') {
+  const key = process.env.YOUTUBE_API_KEY;
+  if (!key) throw new Error('Movie search is not set up yet');
+  const ck = `${order}:${q.toLowerCase()}`, hit = ytCache.get(ck);
+  if (hit && Date.now() - hit.at < 3 * 3600_000) return hit.data;
+  const params = new URLSearchParams({ part: 'snippet', type: 'video', videoDuration: 'long', videoEmbeddable: 'true', safeSearch: 'moderate', regionCode: 'NG', maxResults: '20', order, q, key });
+  const res = await fetch(YT + 'search?' + params).then((r) => r.json());
+  if (res.error) throw new Error(res.error.message);
+  const ids = res.items.map((i) => i.id.videoId).filter(Boolean);
+  // One cheap call for the running times, so cards can say "1h 52m".
+  const det = ids.length ? await fetch(YT + 'videos?' + new URLSearchParams({ part: 'contentDetails,statistics', id: ids.join(','), key })).then((r) => r.json()) : { items: [] };
+  const mins = Object.fromEntries((det.items ?? []).map((v) => {
+    const [, h = 0, m = 0] = /PT(?:(\d+)H)?(?:(\d+)M)?/.exec(v.contentDetails.duration) ?? [];
+    return [v.id, { mins: +h * 60 + +m, views: +(v.statistics?.viewCount ?? 0) }];
+  }));
+  const decode = (t) => t.replace(/&#39;/g, '’').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const data = res.items.filter((i) => i.id.videoId && (mins[i.id.videoId]?.mins ?? 0) >= 40).map((i) => ({
+    id: i.id.videoId,
+    title: decode(i.snippet.title),
+    channel: decode(i.snippet.channelTitle),
+    thumb: i.snippet.thumbnails.high?.url ?? i.snippet.thumbnails.medium?.url,
+    published: i.snippet.publishedAt,
+    mins: mins[i.id.videoId]?.mins ?? null,
+    views: mins[i.id.videoId]?.views ?? null,
+  }));
+  ytCache.set(ck, { at: Date.now(), data });
+  return data;
+}
+const corsOrigins = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use('/api', (req, res, next) => {
+  const o = req.headers.origin;
+  if (o && (!corsOrigins.length || corsOrigins.includes(o))) res.set({ 'Access-Control-Allow-Origin': o, Vary: 'Origin' });
+  next();
+});
+app.get('/api/movies/shelves', async (_req, res) => {
+  try {
+    const shelves = await Promise.all(SHELVES.map(async (sh) => ({ id: sh.id, title: sh.title, items: await ytSearch(sh.q, sh.order) })));
+    res.json({ shelves: shelves.filter((s) => s.items.length) });
+  } catch (e) { res.status(503).json({ error: e.message }); }
+});
+app.get('/api/movies/search', async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 80);
+  if (q.length < 2) return res.json({ items: [] });
+  try { res.json({ items: await ytSearch(`${q} full movie`) }); } catch (e) { res.status(503).json({ error: e.message }); }
+});
+
 // Where the page finds this server. Served here it's "same address"; the Vercel build writes its own copy.
 app.get('/config.js', (_req, res) => res.type('js').send('window.LS_API = "";'));
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
