@@ -41,6 +41,14 @@ function navigate(path) {
   history.pushState(null, '', path);
   route();
 }
+/* ---------- one chat for the two of you, on every page ---------- */
+let chat = null;
+function syncChat(partner = me?.partner) {
+  if (!me?.user) return;
+  chat ??= new Chat({ socket, meId: me.user.id, partner, copy: copyText, open: (code) => navigate('/r/' + code) });
+  chat.setPartner(partner);
+}
+
 function route() {
   const m = location.pathname.match(/^\/r\/([A-Za-z0-9]{4,6})\/?$/);
   const play = location.pathname.match(/^\/play\/(\w+)\/?$/);
@@ -48,6 +56,7 @@ function route() {
   const col = location.pathname.match(/^\/between\/c\/([\w-]+)\/?$/);
   if (col) { leaveRoom(); return showCollection({ app, MARK, store, emit, startGame, navigate, cleanup: homeCleanup, me }, col[1]); }
   if (m) return showRoom(m[1].toUpperCase());
+  syncChat();
   if (location.pathname === '/me') { leaveRoom(); return showProfile(); }
   if (location.pathname === '/quiz') { leaveRoom(); return showQuiz({ app, MARK, startGame, cleanup: homeCleanup }); }
   if (bu) {
@@ -157,6 +166,11 @@ function showHome() {
         <span class="qz-box-copy"><h3>Quiz Duel</h3><p>Live trivia, same clock, no looking it up. Every right answer is a point.</p></span>
         <span class="go"><i class="ph ph-arrow-up-right"></i></span>
       </a>
+      <a class="qz-box mv-box" href="/play/movie" data-link>
+        <span class="qz-box-icon"><i class="ph-fill ph-popcorn"></i></span>
+        <span class="qz-box-copy"><h3>Movie Night</h3><p>Pick a film and watch together. Pause, skip or rewind, and it happens on both phones.</p></span>
+        <span class="go"><i class="ph ph-arrow-up-right"></i></span>
+      </a>
       <div class="rack">
         ${catalog.map((g) => `
           <a class="tile ${SPANS[g.id] ?? ''}${g.closed ? ' is-closed' : ''}" href="${g.closed ? '#' : `/play/${g.id}`}" data-game="${g.id}"${g.closed ? ' aria-disabled="true"' : ''}>
@@ -198,19 +212,24 @@ function showHome() {
     homeCleanup.push(tilt(t, { max: 5 }));
   });
 
-  // Real boards, frozen mid-game, as previews.
-  for (const t of app.querySelectorAll('.tile')) {
-    const id = t.dataset.game, box = t.querySelector('.stagebox');
-    if (id === 'pool') continue;
-    import(`/render/${id}.js`).then((mod) => {
+  // Real boards, frozen mid-game, as previews. Built one at a time: each 3D preview renders once,
+  // becomes a still picture and frees its GPU context before the next starts, so phones never
+  // hold more than one of them at once.
+  (async () => {
+    for (const t of app.querySelectorAll('.tile')) {
+      const id = t.dataset.game, box = t.querySelector('.stagebox');
+      if (id === 'pool') continue;
+      const mod = await import(`/render/${id}.js`);
       if (!box.isConnected) return;
       const host = document.createElement('div');
       box.append(host);
       const r = mod.mount(host, { send: async () => ({}), preview: true });
       r.update(sample(id), { you: 0, seq: 0, players: [{ name: 'You' }, { name: 'Friend' }], lastMove: null, prev: null });
       homeCleanup.push(() => r.destroy?.());
-    });
-  }
+      // A 3D preview removes its canvas once it has frozen into a picture.
+      for (let k = 0; k < 120 && host.querySelector('canvas'); k++) await new Promise((res) => requestAnimationFrame(res));
+    }
+  })();
 
   import('./pool3d.js').then(async ({ PoolTable }) => {
     const { init } = await import('/shared/games/pool.js');
@@ -256,7 +275,6 @@ function leaveRoom() {
   if (!current) return;
   if (current.data) socket.emit('leave', { code: current.code });
   current.renderer?.destroy?.();
-  current.chat?.destroy();
   clearTimeout(current.receiptTimer);
   current = null;
   renderNet();
@@ -320,7 +338,9 @@ socket.on('room', async (data) => {
     buildRoom(data);
     if (data.game === 'between' && data.options?.pack) remember(store, data.code, data.options.pack);
   }
-  room.chat.setPeople(data.you, data.players);
+  // In a game, the chat is with whoever is across the table (or your partner, before they join).
+  const across = data.players[1 - data.you];
+  syncChat(across ? { ...across, inRoom: across.connected } : me?.partner);
   renderVersus(data);
   renderNet();
   app.querySelector('.room')?.classList.toggle('is-waiting', !data.state);
@@ -348,7 +368,7 @@ socket.on('room', async (data) => {
     await room.mounting;
     if (current !== room || room.data !== data) return;
   }
-  const meta = { you: data.you, seq: data.seq, lastMove: data.lastMove, prev: data.prev, players: data.players, rematch: data.rematch, record: data.record };
+  const meta = { you: data.you, seq: data.seq, lastMove: data.lastMove, prev: data.prev, players: data.players, rematch: data.rematch, record: data.record, now: data.now };
   // Animated games (pool shots, mancala sowing) play out before the result is announced.
   const lm = data.lastMove;
   if ((data.game === 'pool' || data.game === 'mancala') && data.prev && lm?.seq === data.seq && lm.move?.type !== 'resign' && room.shown !== data.seq) {
@@ -378,7 +398,6 @@ function buildRoom(data) {
       <div class="dock" id="dock"></div>
     </div>`;
   app.querySelector('#copycode').onclick = (e) => copyLink(data.code, e.currentTarget);
-  current.chat = new Chat({ socket, code: data.code });
 }
 
 /** Clipboard API needs https; plain-http addresses (and iOS) need a selected, editable element. */
@@ -432,7 +451,8 @@ async function copyLink(code, button) {
       <p class="share-state${ok ? ' ok' : ''}">${ok ? '<i class="ph-fill ph-check-circle"></i>Copied. Paste it anywhere.' : 'Tap a button below to send it.'}</p>
       <input class="field share-url" readonly value="${esc(url)}" aria-label="Invite link">
       <div class="share-grid">
-        <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"><i class="ph ph-whatsapp-logo"></i>WhatsApp</a>
+        ${chat?.them ? `<button class="btn btn-primary share-chat" type="button" data-chat><i class="ph-fill ph-chat-teardrop-text"></i>Send in our chat to ${esc(chat.them.name)}</button>` : ''}
+        <a class="btn ${chat?.them ? '' : 'btn-primary'}" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener"><i class="ph ph-whatsapp-logo"></i>WhatsApp</a>
         <a class="btn" href="sms:&body=${encodeURIComponent(text)}"><i class="ph ph-chat-text"></i>Messages</a>
         <button class="btn" type="button" data-copy><i class="ph ph-copy"></i>Copy again</button>
         ${navigator.share ? '<button class="btn" type="button" data-share><i class="ph ph-share-fat"></i>More</button>' : ''}
@@ -443,6 +463,11 @@ async function copyLink(code, button) {
   dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
   const input = dlg.querySelector('.share-url');
   input.addEventListener('focus', () => input.setSelectionRange(0, url.length));
+  dlg.querySelector('[data-chat]')?.addEventListener('click', () => {
+    dlg.close();
+    haptic(10);
+    chat.sendInvite(code, `Come play ${g} with me`);
+  });
   dlg.querySelector('[data-copy]').addEventListener('click', async (e) => {
     const btn = e.currentTarget, again = await copyText(url);
     const state = dlg.querySelector('.share-state');
@@ -698,6 +723,7 @@ async function refreshMe() {
 socket.on('presence', ({ id, online, lastActive }) => {
   if (!me) return;
   for (const p of [me.partner, ...me.people.map((x) => x.person)]) if (p?.id === id) Object.assign(p, { online, lastActive });
+  if (chat?.them?.id === id) { Object.assign(chat.them, { online, lastActive }); chat.renderTyping(); }
   const el = document.getElementById('presence');
   if (el && me.partner?.id === id) {
     el.className = `presence${online ? ' on' : ''}`;
@@ -780,6 +806,7 @@ function openSettings() {
   });
   dlg.querySelector('#logout').addEventListener('click', () => {
     socket.emit('logout', { session });
+    chat?.destroy();
     try { localStorage.removeItem('ls.session'); } catch { /* private mode */ }
     location.href = '/';
   });

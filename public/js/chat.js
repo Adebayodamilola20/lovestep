@@ -1,17 +1,23 @@
 import { haptic } from './fx.js';
-import { avatarHtml } from './auth.js';
+import { avatarHtml, seen } from './auth.js';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const QUICK = ['Good luck', 'Nice shot', 'Your move', 'Rematch?', 'GG'];
 
-/** Floating chat: a bubble that grows into the conversation, with typing and unread signals. */
+/**
+ * Floating chat: a bubble that grows into the conversation, with typing and unread signals.
+ * There is one conversation per couple, shared by the home page and every game, and kept on the server.
+ */
 export class Chat {
-  constructor({ socket, code }) {
+  constructor({ socket, meId, partner, copy, open }) {
     this.socket = socket;
-    this.code = code;
+    this.meId = meId;
+    this.copy = copy; // (text) => Promise<boolean>
+    this.openLink = open; // (code) => void
     this.messages = [];
     this.unread = 0;
-    this.them = { name: 'Opponent', connected: false };
+    this.them = null;
     this.theyType = false;
     this.typingSent = false;
 
@@ -31,7 +37,7 @@ export class Chat {
         <div class="quick">${QUICK.map((q) => `<button type="button">${q}</button>`).join('')}</div>
         <form class="composer">
           <label class="sr-only" for="chat-input">Message</label>
-          <input id="chat-input" class="field" name="text" maxlength="200" autocomplete="off" placeholder="Message">
+          <input id="chat-input" class="field" name="text" maxlength="500" autocomplete="off" placeholder="Message">
           <button class="send" type="submit" aria-label="Send" disabled><i class="ph ph-arrow-up"></i></button>
         </form>
       </section>
@@ -60,22 +66,32 @@ export class Chat {
     this.onKey = (e) => { if (e.key === 'Escape' && this.isOpen) this.close(); };
     document.addEventListener('keydown', this.onKey);
 
-    this.onChat = (msg) => this.receive(msg);
-    this.onTyping = ({ on }) => { this.theyType = on; this.renderTyping(); };
-    socket.on('chat', this.onChat);
-    socket.on('typing', this.onTyping);
-    this.render();
+    this.onChat = (msg) => { if (this.them && msg.with === this.them.id) this.receive(msg); };
+    this.onTyping = ({ from, on }) => { if (from === this.them?.id) { this.theyType = on; this.renderTyping(); } };
+    socket.on('dm', this.onChat);
+    socket.on('dm:typing', this.onTyping);
+    this.list.addEventListener('click', (e) => this.onCardClick(e));
+    this.setPartner(partner);
   }
 
   get isOpen() { return document.body.classList.contains('chat-open'); }
 
-  setPeople(you, players) {
-    this.you = you;
-    const p = players[1 - you];
-    this.them = p ? { name: p.name, connected: p.connected } : { name: 'Opponent', connected: false };
+  /** Who you're talking to. Loads your shared history the first time (or when it changes). */
+  async setPartner(p) {
+    const changed = p?.id !== this.them?.id;
+    this.them = p ? { id: p.id, name: p.username ?? p.name, avatar: p.avatar, online: p.online, lastActive: p.lastActive, inRoom: p.inRoom } : null;
+    this.root.hidden = !this.them;
+    if (!this.them) return;
     this.root.querySelector('.them-name').textContent = this.them.name;
     this.renderTyping();
+    if (!changed) return;
+    this.messages = [];
+    this.render();
+    const res = await new Promise((r) => this.socket.emit('dm:history', { to: this.them.id }, r));
+    if (res?.messages && p.id === this.them?.id) { this.messages = res.messages.map((m) => this.shape(m, false)); this.render(); }
   }
+
+  shape(m, fresh) { return { ...m, mine: m.from === this.meId, fresh }; }
 
   open() {
     document.body.classList.add('chat-open');
@@ -96,18 +112,26 @@ export class Chat {
 
   send(text) {
     text = String(text || '').trim();
-    if (!text) return;
-    this.socket.emit('chat', { code: this.code, text });
+    if (!text || !this.them) return;
+    this.socket.emit('dm', { to: this.them.id, text });
     this.input.value = '';
     this.sendBtn.disabled = true;
     this.stopTyping();
   }
 
+  /** Drop a game invite into the conversation as a card the other person can copy or open. */
+  sendInvite(code, text = '') {
+    if (!this.them) return false;
+    this.socket.emit('dm', { to: this.them.id, text, invite: { code } });
+    this.open();
+    return true;
+  }
+
   onType() {
     this.sendBtn.disabled = !this.input.value.trim();
-    if (!this.typingSent && this.input.value) {
+    if (!this.typingSent && this.input.value && this.them) {
       this.typingSent = true;
-      this.socket.emit('typing', { code: this.code, on: true });
+      this.socket.emit('dm:typing', { to: this.them.id, on: true });
     }
     clearTimeout(this.typingTimer);
     this.typingTimer = setTimeout(() => this.stopTyping(), 2500);
@@ -115,23 +139,36 @@ export class Chat {
 
   stopTyping() {
     clearTimeout(this.typingTimer);
-    if (this.typingSent) this.socket.emit('typing', { code: this.code, on: false });
+    if (this.typingSent && this.them) this.socket.emit('dm:typing', { to: this.them.id, on: false });
     this.typingSent = false;
   }
 
   receive(msg) {
-    const mine = msg.by === this.you;
-    this.messages.push({ text: msg.text, mine, from: msg.from, fresh: true });
-    if (!mine) {
+    const m = this.shape(msg, true);
+    this.messages.push(m);
+    if (!m.mine) {
       this.theyType = false;
       if (!this.isOpen) {
         this.unread++;
         this.renderBadge();
-        this.showBanner(msg);
+        this.showBanner({ from: this.them.name, avatar: this.them.avatar, text: m.invite ? `Sent you a ${m.invite.game} link` : m.text });
         haptic(16);
       }
     }
     this.render();
+  }
+
+  async onCardClick(e) {
+    const btn = e.target.closest('[data-copy-code], [data-open-code]');
+    if (!btn) return;
+    const code = btn.dataset.copyCode || btn.dataset.openCode;
+    if (btn.dataset.openCode) { this.close(); this.openLink?.(code); return; }
+    const ok = await this.copy?.(`${location.origin}/r/${code}`);
+    btn.classList.toggle('copied', !!ok);
+    btn.innerHTML = ok ? '<i class="ph ph-check"></i>Copied' : '<i class="ph ph-copy"></i>Press and hold the link';
+    haptic(ok ? 10 : 4);
+    clearTimeout(btn._t);
+    btn._t = setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '<i class="ph ph-copy"></i>Copy link'; }, 1800);
   }
 
   showBanner(msg) {
@@ -153,16 +190,35 @@ export class Chat {
   }
 
   renderTyping() {
+    if (!this.them) return;
     const status = this.root.querySelector('.them-status');
-    status.innerHTML = this.theyType ? 'typing<span class="dots" style="margin-left:4px"><i></i><i></i><i></i></span>' : this.them.connected ? 'In the room' : 'Away';
+    status.innerHTML = this.theyType ? 'typing<span class="dots" style="margin-left:4px"><i></i><i></i><i></i></span>'
+      : this.them.inRoom ? 'In the game with you' : esc(cap(seen({ online: this.them.online, lastActive: this.them.lastActive }) || ''));
     this.fabTyping.classList.toggle('on', this.theyType && !this.isOpen);
     this.render();
   }
 
+  bubble(m) {
+    if (m.invite) {
+      const url = `${location.origin}/r/${m.invite.code}`;
+      return `<div class="bubble invite${m.mine ? ' mine' : ''}${m.fresh ? ' new' : ''}">
+        <span class="inv-game"><i class="ph-fill ph-game-controller"></i>${esc(m.mine ? `You sent a ${m.invite.game} link` : `${m.invite.game}: come play`)}</span>
+        ${m.text ? `<span class="inv-text">${esc(m.text)}</span>` : ''}
+        <span class="inv-url">${esc(url)}</span>
+        <span class="inv-actions">
+          <button type="button" data-copy-code="${esc(m.invite.code)}"><i class="ph ph-copy"></i>Copy link</button>
+          <button type="button" class="go" data-open-code="${esc(m.invite.code)}"><i class="ph ph-play"></i>Open</button>
+        </span>
+      </div>`;
+    }
+    return `<div class="bubble${m.mine ? ' mine' : ''}${m.fresh ? ' new' : ''}">${esc(m.text)}</div>`;
+  }
+
   render() {
+    const name = this.them?.name ?? 'them';
     const html = this.messages.length
-      ? this.messages.map((m) => `<div class="bubble${m.mine ? ' mine' : ''}${m.fresh ? ' new' : ''}">${esc(m.text)}</div>`).join('')
-      : `<p class="empty">Say something to ${esc(this.them.name)}. Messages stay in this room.</p>`;
+      ? this.messages.map((m) => this.bubble(m)).join('')
+      : `<p class="empty">Say something to ${esc(name)}. This chat is just the two of you, and it follows you into every game.</p>`;
     this.list.innerHTML = html + (this.theyType ? '<div class="bubble typing" aria-label="typing"><span class="dots"><i></i><i></i><i></i></span></div>' : '');
     this.list.scrollTop = this.list.scrollHeight;
     for (const m of this.messages) m.fresh = false;
@@ -170,8 +226,8 @@ export class Chat {
 
   destroy() {
     this.stopTyping();
-    this.socket.off('chat', this.onChat);
-    this.socket.off('typing', this.onTyping);
+    this.socket.off('dm', this.onChat);
+    this.socket.off('dm:typing', this.onTyping);
     document.removeEventListener('keydown', this.onKey);
     document.body.classList.remove('chat-open');
     clearTimeout(this.bannerTimer);

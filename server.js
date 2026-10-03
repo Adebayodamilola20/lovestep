@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
@@ -14,6 +15,10 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const store = await createStore(root + 'data');
 const users = createUsers(store, await store.load('users', {}));
 const records = createRecords(store, await store.load('records', {}));
+// One conversation per couple, shared by the home page and every game: "uidA|uidB" -> messages.
+const threads = await store.load('threads', {});
+const threadKey = (a, b) => [a, b].sort().join('|');
+const THREAD_MAX = 300;
 
 const app = express();
 app.use(express.static(root + 'public'));
@@ -83,6 +88,7 @@ function payload(room, you) {
     lastMove: room.lastMove,
     score: room.score,
     rematch: room.rematch,
+    now: Date.now(), // lets phones line their clocks up with the server (Movie Night sync)
   };
 }
 
@@ -343,18 +349,32 @@ io.on('connection', (socket) => {
     broadcast(room);
   }));
 
-  socket.on('chat', guard(({ code, text } = {}) => {
-    const { room, idx } = seat(code);
-    const msg = String(text || '').trim().slice(0, 200);
-    if (!room || idx < 0 || !msg) return;
-    room.players.forEach((p) => p.sid && io.to(p.sid).emit('chat', { from: nameOf(uid()), avatar: personOf(uid()).avatar, text: msg, by: idx }));
+  /* ---------- chat: one thread per couple, on every page ---------- */
+  const okPartner = (to) => to && to !== uid() && users.get(to);
+  socket.on('dm:history', (...args) => {
+    const cb = reply(args), { to } = args[0] ?? {};
+    if (!user || !okPartner(to)) return cb({ messages: [] });
+    cb({ messages: threads[threadKey(uid(), to)] ?? [] });
+  });
+  socket.on('dm', guard(({ to, text, invite } = {}, cb) => {
+    if (!okPartner(to)) return cb?.({ error: 'Nobody to message yet' });
+    const msg = { id: randomUUID(), from: uid(), text: String(text || '').trim().slice(0, 500), at: Date.now() };
+    // An invite card: a link to a game room, shown with Copy and Open buttons.
+    if (invite?.code && rooms.has(String(invite.code).toUpperCase())) {
+      const room = rooms.get(String(invite.code).toUpperCase());
+      msg.invite = { code: room.code, game: games[room.game].meta.name };
+    }
+    if (!msg.text && !msg.invite) return cb?.({ error: 'Empty message' });
+    const list = (threads[threadKey(uid(), to)] ??= []);
+    list.push(msg);
+    if (list.length > THREAD_MAX) list.splice(0, list.length - THREAD_MAX);
+    store.save('threads', threads);
+    for (const id of [uid(), to]) io.to('u:' + id).emit('dm', { ...msg, with: id === uid() ? to : uid() });
+    users.touch(uid());
+    cb?.({ ok: true });
   }));
-
-  socket.on('typing', guard(({ code, on } = {}) => {
-    const { room, idx } = seat(code);
-    if (!room || idx < 0) return;
-    const other = room.players[1 - idx];
-    if (other?.sid) io.to(other.sid).emit('typing', { on: !!on });
+  socket.on('dm:typing', guard(({ to, on } = {}) => {
+    if (okPartner(to)) io.to('u:' + to).emit('dm:typing', { from: uid(), on: !!on });
   }));
 
   // Connection quality: clients time a round trip and report good / weak.

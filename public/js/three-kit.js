@@ -4,9 +4,14 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 export { THREE };
 
+// Phones get a lighter renderer: high-density Android screens otherwise ask the GPU for buffers
+// nearly 3x the screen, and Chrome drops the context (a white box with a broken-image icon).
+export const LITE = matchMedia('(pointer: coarse)').matches || (navigator.deviceMemory ?? 8) <= 4;
+export const SHADOW = LITE ? 512 : 1024;
+
 export function stage(container, { fov = 35, env = 0.35, exposure = 1, near = 1, far = 20000 } = {}) {
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const renderer = new THREE.WebGLRenderer({ antialias: !LITE, alpha: true, preserveDrawingBuffer: false, powerPreference: LITE ? 'default' : 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, LITE ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = exposure;
@@ -15,6 +20,21 @@ export function stage(container, { fov = 35, env = 0.35, exposure = 1, near = 1,
   renderer.domElement.style.touchAction = 'none';
   renderer.domElement.style.display = 'block';
   container.prepend(renderer.domElement);
+
+  // If the phone still takes the GPU away (memory pressure, app switch), say so and offer a reload.
+  // Game state lives on the server, so reloading carries on exactly where you were.
+  let lostNote = null;
+  renderer.domElement.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    if (dead || lostNote) return;
+    lostNote = document.createElement('button');
+    lostNote.type = 'button';
+    lostNote.className = 'gl-lost';
+    lostNote.innerHTML = '<i class="ph ph-arrow-clockwise"></i><b>The 3D view paused</b><small>Tap to reload. Your game carries on where it was.</small>';
+    lostNote.addEventListener('click', () => location.reload());
+    container.append(lostNote);
+  });
+  renderer.domElement.addEventListener('webglcontextrestored', () => { lostNote?.remove(); lostNote = null; });
 
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -95,7 +115,11 @@ export function stage(container, { fov = 35, env = 0.35, exposure = 1, near = 1,
       cancelAnimationFrame(raf);
       ro.disconnect();
       renderer.dispose();
+      // Hand the GPU context back now instead of whenever garbage collection gets to it:
+      // phones only allow a handful at once.
+      renderer.forceContextLoss();
       renderer.domElement.remove();
+      lostNote?.remove();
     },
   };
 }

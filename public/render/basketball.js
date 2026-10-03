@@ -1,5 +1,5 @@
 import { resolve, scores, TURN_MS, ON_FIRE } from '/shared/games/basketball.js';
-import { stage, THREE, tween, ease, floatLabel } from '/js/three-kit.js';
+import { stage, THREE, tween, ease, floatLabel, SHADOW } from '/js/three-kit.js';
 import { haptic, reduced } from '/js/fx.js';
 import { avatarHtml } from '/js/auth.js';
 
@@ -109,7 +109,7 @@ export function mount(el, { send, preview }) {
   lamp.target.position.set(0, 1.5, RIM_Z);
   scene.add(lamp, lamp.target);
   lamp.castShadow = true;
-  lamp.shadow.mapSize.set(1024, 1024);
+  lamp.shadow.mapSize.set(SHADOW, SHADOW);
 
   const ballGeo = new THREE.SphereGeometry(BALL_R, 32, 20), ballMat = new THREE.MeshStandardMaterial({ map: ballTexture(), roughness: 0.6 });
   const makeBall = () => { const b = new THREE.Mesh(ballGeo, ballMat); b.castShadow = true; scene.add(b); return b; };

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { W, H, R, POCKETS, createSim } from '/shared/games/pool.js';
 import { reduced } from './fx.js';
+import { LITE } from './three-kit.js';
 
 const RAIL = 50, CUSH = 15, RAIL_H = 24, CUSH_H = 15;
 const COLORS = { 1: '#f0b20a', 2: '#1645b5', 3: '#cf2a1f', 4: '#56288f', 5: '#ea6a0e', 6: '#0f7a3d', 7: '#7d1b20', 8: '#151515' };
@@ -71,8 +72,8 @@ export class PoolTable {
     this.dirty = true;
     this.destroyed = false;
 
-    const r = this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const r = this.renderer = new THREE.WebGLRenderer({ antialias: !LITE, alpha: true, powerPreference: LITE ? 'default' : 'high-performance' });
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, LITE ? 1.5 : 2));
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.0;
@@ -191,7 +192,7 @@ export class PoolTable {
     lamp.position.set(0, 1150, 80);
     lamp.target.position.set(0, 0, 0);
     lamp.castShadow = true;
-    lamp.shadow.mapSize.set(2048, 2048);
+    lamp.shadow.mapSize.set(LITE ? 1024 : 2048, LITE ? 1024 : 2048);
     lamp.shadow.camera.near = 600; lamp.shadow.camera.far = 1500;
     lamp.shadow.bias = -0.0004;
     lamp.shadow.radius = 4;
@@ -521,6 +522,7 @@ export class PoolTable {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     this.renderer.dispose();
+    this.renderer.forceContextLoss(); // free the GPU context now; phones allow only a few
     this.renderer.domElement.remove();
   }
 }

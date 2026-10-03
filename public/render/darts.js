@@ -1,5 +1,5 @@
 import { ORDER, RINGS, PER_TURN } from '/shared/games/darts.js';
-import { stage, THREE, tween, ease, floatLabel } from '/js/three-kit.js';
+import { stage, THREE, tween, ease, floatLabel, SHADOW } from '/js/three-kit.js';
 import { haptic, reduced } from '/js/fx.js';
 import { avatarHtml } from '/js/auth.js';
 
@@ -110,7 +110,7 @@ export function mount(el, { send, preview }) {
   lamp.position.set(0, 1100, 1300);
   lamp.target = face;
   lamp.castShadow = true;
-  lamp.shadow.mapSize.set(1024, 1024);
+  lamp.shadow.mapSize.set(SHADOW, SHADOW);
   scene.add(lamp);
 
   const reticle = new THREE.Group();

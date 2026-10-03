@@ -1,5 +1,5 @@
 import { CUPS, CUP_R, BALLS, RACK_D } from '/shared/games/cuppong.js';
-import { stage, THREE, tween, ease, floatLabel } from '/js/three-kit.js';
+import { stage, THREE, tween, ease, floatLabel, SHADOW } from '/js/three-kit.js';
 import { haptic, reduced } from '/js/fx.js';
 import { avatarHtml } from '/js/auth.js';
 
@@ -53,7 +53,7 @@ export function mount(el, { send, preview }) {
   lamp.position.set(0, 2400, -1400);
   lamp.target = top;
   lamp.castShadow = true;
-  lamp.shadow.mapSize.set(1024, 1024);
+  lamp.shadow.mapSize.set(SHADOW, SHADOW);
   scene.add(lamp);
 
   const cups = CUPS.map(() => { const c = makeCup(); scene.add(c); return c; });
