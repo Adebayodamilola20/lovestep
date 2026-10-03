@@ -1,5 +1,6 @@
 import { catalog, games } from '/shared/games/index.js';
 import { Chat } from './chat.js';
+import { Calls } from './call.js';
 import { tilt, haptic, reduced } from './fx.js';
 import { celebrate } from './confetti.js';
 import { LOGO, BRAND } from './brand.js';
@@ -45,8 +46,12 @@ const SUBTITLES = [['', 'Off'], ['en', 'English'], ['fr', 'French'], ['es', 'Spa
 
 /* ---------- one chat for the two of you, on every page ---------- */
 let chat = null;
+let calls = null;
 function syncChat(partner = me?.partner) {
   if (!me?.user) return;
+  // The call button sits beside the chat: everyone you've played with is a contact.
+  calls ??= new Calls({ socket, api: window.LS_API || '', me: () => me?.user, people: () => (me?.people ?? []).map((r) => r.person).filter((p) => p?.id), toast });
+  calls.refresh();
   chat ??= new Chat({ socket, meId: me.user.id, partner, copy: copyText, open: (code) => navigate('/r/' + code) });
   chat.setPartner(partner);
 }

@@ -337,3 +337,48 @@ dialog::backdrop { background: var(--color-scrim); backdrop-filter: blur(6px); }
 .inv-actions button:active { transform: scale(0.97); }
 .inv-actions button.go { background: var(--color-accent); color: var(--color-accent-ink); border-color: transparent; }
 .inv-actions button.copied { background: var(--color-ok); color: var(--color-paper); border-color: transparent; }
+
+/* ---------- voice calls ---------- */
+.call-fab { position: fixed; left: calc(16px + env(safe-area-inset-left)); bottom: calc(20px + env(safe-area-inset-bottom)); z-index: var(--z-chat, 60);
+  width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--color-rule); cursor: pointer;
+  background: var(--color-paper-2); color: var(--color-ok); box-shadow: var(--shadow-deep); transition: transform 160ms var(--ease-out); }
+.call-fab .ph-fill { font-size: 24px; }
+.call-fab:active { transform: scale(0.94); }
+.call-fab[hidden] { display: none; }
+.call-fab.live { background: var(--color-ok); color: var(--color-paper); animation: callpulse 1.6s ease-in-out infinite; }
+@keyframes callpulse { 50% { box-shadow: 0 0 0 10px oklch(78% 0.13 155 / 0); } 0%, 100% { box-shadow: 0 0 0 0 oklch(78% 0.13 155 / 0.5); } }
+body.chat-open .call-fab { display: none; }
+
+.call-pick ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.call-pick li button { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--color-rule); background: var(--color-paper-2); color: var(--color-ink); text-align: left; cursor: pointer; font: inherit; }
+.call-pick li button:active { transform: scale(0.98); }
+.call-pick li span { display: grid; gap: 2px; min-width: 0; }
+.call-pick li small { color: var(--color-ink-3); font-size: var(--text-xs); }
+.call-pick li .ph-fill { font-size: 22px; color: var(--color-ok); }
+
+.call { position: fixed; z-index: 2000; }
+.call[hidden] { display: none; }
+.call.big { inset: 0; display: grid; place-items: center; background: radial-gradient(120% 80% at 50% 20%, oklch(26% 0.04 165), oklch(10% 0.01 165)); animation: callin 260ms var(--ease-out); }
+@keyframes callin { from { opacity: 0; transform: scale(0.98); } }
+.call-card { position: relative; width: min(100%, 420px); min-height: 100dvh; display: grid; grid-template-rows: 1fr auto; padding: calc(64px + env(safe-area-inset-top)) 24px calc(48px + env(safe-area-inset-bottom)); }
+.call-min { position: absolute; top: calc(16px + env(safe-area-inset-top)); left: 16px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: oklch(100% 0 0 / 0.1); color: #fff; font-size: 22px; display: grid; place-items: center; cursor: pointer; }
+.call-who { display: grid; justify-items: center; align-content: start; gap: 10px; text-align: center; padding-top: 6vh; }
+.call-who b { font: 700 var(--text-2xl)/1.1 var(--font-display); letter-spacing: -0.03em; color: #fff; }
+.call-state { color: oklch(100% 0 0 / 0.7); font-size: var(--text-md); }
+.st-reconnecting .call-state { color: oklch(84% 0.13 85); }
+.st-ended .call-state { color: oklch(76% 0.15 28); }
+.call-ring { position: relative; display: grid; place-items: center; margin-bottom: 8px; }
+.st-ringing .call-ring::before, .st-calling .call-ring::before, .st-connecting .call-ring::before { content: ''; position: absolute; inset: -14px; border-radius: 50%; border: 2px solid oklch(78% 0.13 155 / 0.6); animation: ringout 1.6s ease-out infinite; }
+@keyframes ringout { from { transform: scale(0.9); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
+.call-actions { display: flex; justify-content: center; gap: clamp(20px, 8vw, 40px); }
+.call-btn { display: grid; justify-items: center; gap: 8px; width: 72px; border: 0; background: none; color: #fff; cursor: pointer; font: 600 var(--text-xs)/1 var(--font-body); }
+.call-btn i { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: oklch(100% 0 0 / 0.14); transition: transform 140ms var(--ease-out), background-color 160ms ease; }
+.call-btn:active i { transform: scale(0.92); }
+.call-btn.on i { background: #fff; color: #111; }
+.call-btn.accept i { background: oklch(66% 0.17 150); }
+.call-btn.decline i { background: oklch(60% 0.21 27); }
+.call.mini { left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); }
+.call-mini { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 6px; border-radius: var(--radius-pill); border: 0; background: oklch(66% 0.17 150); color: #fff; font: 600 var(--text-sm)/1 var(--font-body); box-shadow: var(--shadow-deep); cursor: pointer; }
+.call-mini .t { opacity: 0.9; }
+.call-mini [data-end] { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: oklch(60% 0.21 27); font-size: 18px; }
+.st-reconnecting.mini .call-mini { background: oklch(64% 0.14 70); }

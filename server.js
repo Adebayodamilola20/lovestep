@@ -103,6 +103,12 @@ app.get('/api/movies/search', async (req, res) => {
   try { res.json({ items: await ytSearch(q) }); } catch (e) { res.status(503).json({ error: e.message }); }
 });
 
+app.get('/api/ice', (_req, res) => {
+  const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.TURN_URL) servers.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USER, credential: process.env.TURN_PASS });
+  res.json({ iceServers: servers });
+});
+
 // Where the page finds this server. Served here it's "same address"; the Vercel build writes its own copy.
 app.get('/config.js', (_req, res) => res.type('js').send('window.LS_API = "";'));
 app.get('/health', (_req, res) => res.json({ ok: true, rooms: rooms.size }));
@@ -418,6 +424,23 @@ io.on('connection', (socket) => {
     }
     broadcast(room);
   }));
+
+  /* ---------- voice calls: the server only rings and passes connection details; audio goes phone to phone ---------- */
+  socket.on('call:invite', guard(({ to, callId } = {}, cb) => {
+    if (!okPartner(to)) return cb?.({ error: 'Nobody to call' });
+    if (!(online.get(to) > 0)) return cb?.({ error: 'offline' });
+    io.to('u:' + to).emit('call:incoming', { from: personOf(uid()), callId: String(callId).slice(0, 64) });
+    cb?.({ ok: true });
+  }));
+  // Answer, decline, hang up and the WebRTC handshake all pass straight through to the other person.
+  for (const ev of ['call:accept', 'call:decline', 'call:end', 'call:signal', 'call:busy']) {
+    socket.on(ev, guard(({ to, callId, data } = {}) => {
+      if (!okPartner(to)) return;
+      io.to('u:' + to).emit(ev, { from: uid(), callId, data });
+      // Answered on one of your phones: stop the others ringing.
+      if (ev === 'call:accept' || ev === 'call:decline') socket.to('u:' + uid()).emit('call:taken', { callId });
+    }));
+  }
 
   /* ---------- chat: one thread per couple, on every page ---------- */
   const okPartner = (to) => to && to !== uid() && users.get(to);
