@@ -41,6 +41,8 @@ function navigate(path) {
   history.pushState(null, '', path);
   route();
 }
+const SUBTITLES = [['', 'Off'], ['en', 'English'], ['fr', 'French'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['ar', 'Arabic'], ['yo', 'Yoruba'], ['ig', 'Igbo'], ['ha', 'Hausa'], ['sw', 'Swahili']];
+
 /* ---------- one chat for the two of you, on every page ---------- */
 let chat = null;
 function syncChat(partner = me?.partner) {
@@ -362,6 +364,7 @@ socket.on('room', async (data) => {
         },
         copyLink: (btn) => copyLink(room.code, btn),
         partnerName: () => me?.partner?.username ?? null,
+        prefs: () => ({ subs: me?.user?.subs ?? '' }),
         rematch: () => socket.emit('rematch', { code: room.code }),
       });
     });
@@ -642,6 +645,7 @@ const net = { q: navigator.onLine === false ? 'offline' : 'good', misses: 0, slo
 function setNet(q) {
   if (net.q === q) return;
   net.q = q;
+  window.dispatchEvent(new CustomEvent('ls:net', { detail: q })); // Movie Night shows reconnecting / catching up
   if (q !== 'offline' && net.reported !== q) { net.reported = q; socket.emit('net', { q }); }
   renderNet();
 }
@@ -652,7 +656,8 @@ setInterval(() => {
   socket.timeout(3500).emit('ping2', (err) => {
     const rtt = performance.now() - t0;
     if (err) { net.misses++; net.slow = 0; } else { net.misses = 0; net.slow = rtt > 900 ? net.slow + 1 : 0; }
-    setNet(net.misses >= 1 || net.slow >= 2 ? 'weak' : 'good');
+    // Two missed checks in a row (~8s): treat it as offline even if the phone thinks it's connected.
+    setNet(net.misses >= 2 ? 'offline' : net.misses >= 1 || net.slow >= 2 ? 'weak' : 'good');
   });
 }, 4000);
 // Brief blips (a server restart, a tunnel) reconnect in under a second; only warn if it lasts.
@@ -676,7 +681,7 @@ function renderNet() {
   let html = '', kind = '';
   const live = inGame && current.data.state.winner == null && current.data.game !== 'between';
   if (live && opp?.left) {
-    html = `<i class="ph ph-sign-out"></i><span><b>${esc(opp.name)} left the game</b><small>They can come back with the same link.</small></span><button class="btn btn-quiet" type="button" data-home>Leave too</button>`;
+    html = `<i class="ph ph-sign-out"></i><span><b>${esc(opp.name)} left ${current.data.game === 'movie' ? 'Movie Night' : 'the game'}</b><small>They can come back with the same link.</small></span><button class="btn btn-quiet" type="button" data-home>Leave too</button>`;
     kind = 'bad';
   } else if (net.q === 'offline') {
     html = '<span class="spin" aria-hidden="true"></span><span><b>Waiting for connection</b><small>Your network dropped. Hold on, we are reconnecting.</small></span>';
@@ -780,6 +785,9 @@ function openSettings() {
     <form class="sheet-body tool-form" id="acct">
       <div><label class="label" for="st-name">Username</label><input class="field" id="st-name" name="username" value="${esc(my.username)}" maxlength="20" autocapitalize="off"></div>
       <fieldset class="gender"><legend class="label">Gender</legend><div class="chips">${GENDERS.map(([v, l]) => `<button type="button" class="chip-g${my.gender === v ? ' on' : ''}" data-g="${v}">${l}</button>`).join('')}</div></fieldset>
+      <div><label class="label" for="st-subs">Movie subtitles</label>
+        <select class="field" id="st-subs">${SUBTITLES.map(([v, l]) => `<option value="${v}"${(my.subs ?? '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        <small class="hint">Used in Movie Night when the film has captions. You can also switch them with the CC button while watching.</small></div>
       <p class="auth-err" role="alert"></p>
       <button class="btn btn-primary">Save</button>
       ${my.avatar ? '<button class="btn btn-quiet" type="button" id="rmphoto">Remove photo</button>' : ''}
@@ -794,7 +802,7 @@ function openSettings() {
   }));
   dlg.querySelector('#acct').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const r = await emit('profile', { username: dlg.querySelector('#st-name').value.trim(), gender });
+    const r = await emit('profile', { username: dlg.querySelector('#st-name').value.trim(), gender, subs: dlg.querySelector('#st-subs').value });
     if (r.error) { dlg.querySelector('.auth-err').textContent = r.error; return; }
     me.user = { ...me.user, ...r.user };
     dlg.close();

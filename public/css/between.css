@@ -488,3 +488,62 @@ body.net-offline #stage { pointer-events: none; filter: saturate(0.4) brightness
 .mv-meta b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; }
 .mv-loading { display: flex; align-items: center; gap: 10px; color: var(--color-ink-2); }
 .mv-loading .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--color-paper-4); border-top-color: var(--color-ink); animation: spin 800ms linear infinite; }
+.sheet .hint { display: block; margin-top: 6px; color: var(--color-ink-3); font-size: var(--text-xs); }
+
+/* Movie Night, Netflix-style: the film edge to edge, controls float over it and fade */
+.mv-hero { position: relative; display: block; width: calc(100% + 2 * clamp(12px, 3vw, 24px)); margin: 0 calc(-1 * clamp(12px, 3vw, 24px)) var(--space-lg); aspect-ratio: 16 / 10; border: 0; padding: 0; overflow: hidden; background: #000; color: #fff; text-align: left; cursor: pointer; }
+.mv-hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mv-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 30%, oklch(8% 0.01 165 / 0.6) 62%, var(--color-paper) 100%); }
+.mv-hero-copy { position: absolute; left: clamp(12px, 3vw, 24px); right: clamp(12px, 3vw, 24px); bottom: var(--space-sm); z-index: 1; display: grid; gap: 6px; }
+.mv-hero-copy small { color: oklch(100% 0 0 / 0.75); font-weight: 600; font-size: var(--text-xs); letter-spacing: 0.04em; text-transform: uppercase; }
+.mv-hero-copy b { font: 750 clamp(22px, 6vw, 40px)/1.02 var(--font-display); letter-spacing: -0.03em; text-wrap: balance; }
+.mv-hero-cta { justify-self: start; display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; min-height: 44px; padding: 0 20px; border-radius: 8px; background: #fff; color: #111; font: 700 var(--text-sm)/1 var(--font-body); }
+.mv-hero:disabled { cursor: default; }
+.mv-hero:disabled .mv-hero-cta { background: oklch(100% 0 0 / 0.2); color: #fff; }
+.mv-row-scroll { grid-auto-columns: min(44%, 220px); }
+
+.mv-screen { margin: 0 calc(-1 * clamp(12px, 3vw, 24px)); }
+@media (min-width: 760px) { .mv-screen { margin: 0; } .mv-screen .mv-frame { border-radius: var(--radius-lg); } }
+.mv-screen .mv-frame { border-radius: 0; box-shadow: none; }
+.mv-catch { position: absolute; inset: 0 0 30% 0; z-index: 1; }
+.mv-ui { position: absolute; inset: 0; z-index: 2; display: grid; grid-template-rows: auto 1fr auto; pointer-events: none; color: #fff;
+  background: linear-gradient(180deg, oklch(0% 0 0 / 0.65), transparent 28%, transparent 62%, oklch(0% 0 0 / 0.75)); transition: opacity 220ms ease; }
+.mv-frame[data-ui="off"] .mv-ui { opacity: 0; }
+.mv-frame[data-ui="off"] .mv-ui * { pointer-events: none !important; }
+.mv-ui button, .mv-ui input { pointer-events: auto; }
+.mv-ui-top { display: grid; padding: 12px 14px; }
+.mv-ui-top b { font: 700 var(--text-md)/1.2 var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-ui-top small { color: oklch(100% 0 0 / 0.7); font-size: var(--text-xs); }
+.mv-ui-mid { display: flex; align-items: center; justify-content: center; gap: clamp(20px, 9vw, 56px); }
+.mv-ui-bot { padding: 0 12px 8px; }
+.mv-ui-row { display: flex; align-items: center; justify-content: space-between; }
+.mv-ui .mv-seek { height: 22px; margin: 0; }
+.mv-ui .mv-time { color: oklch(100% 0 0 / 0.85); font-size: 12px; }
+.mv-ui .mv-time b { color: #fff; }
+.mv-ui-right { display: flex; gap: 4px; }
+.mv-o { position: relative; width: 52px; height: 52px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: #fff; font-size: 30px; cursor: pointer; transition: transform 140ms var(--ease-out), opacity 140ms ease; filter: drop-shadow(0 2px 6px oklch(0% 0 0 / 0.5)); }
+.mv-o small { position: absolute; font: 700 10px/1 var(--font-mono); top: 50%; left: 50%; transform: translate(-50%, -38%); }
+.mv-o:active { transform: scale(0.9); }
+.mv-o:disabled { opacity: 0.35; }
+.mv-o.big { width: 72px; height: 72px; font-size: 54px; }
+.mv-o.sm { width: 40px; height: 40px; font-size: 22px; }
+.mv-o.on { color: var(--color-accent); }
+.mv-status { position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 6px; padding: var(--space-md); background: oklch(5% 0.01 165 / 0.7); color: #fff; text-align: center; }
+.mv-status[hidden] { display: none; }
+.mv-status small { color: oklch(100% 0 0 / 0.75); max-width: 24rem; }
+.mv-status .spin { width: 30px; height: 30px; border-radius: 50%; border: 3px solid oklch(100% 0 0 / 0.25); border-top-color: #fff; animation: spin 800ms linear infinite; }
+.mv-flash { position: absolute; left: 50%; top: 22%; z-index: 4; transform: translateX(-50%); padding: 6px 12px; border-radius: var(--radius-pill); background: oklch(0% 0 0 / 0.7); color: #fff; font: 700 var(--text-sm)/1 var(--font-mono); opacity: 0; pointer-events: none; }
+.mv-flash.on { animation: mvflash 900ms var(--ease-out); }
+@keyframes mvflash { 0% { opacity: 0; transform: translate(-50%, 6px); } 15% { opacity: 1; transform: translate(-50%, 0); } 70% { opacity: 1; } 100% { opacity: 0; } }
+.mv-below { padding: var(--space-sm) clamp(12px, 3vw, 24px) 0; display: grid; gap: var(--space-sm); }
+@media (min-width: 760px) { .mv-below { padding-inline: 0; } }
+.mv-partner:empty { display: none; }
+.mv-partner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-radius: var(--radius-md); background: oklch(78% 0.13 75 / 0.12); border: 1px solid oklch(78% 0.13 75 / 0.35); }
+.mv-partner p { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
+.mv-change { margin-top: var(--space-xs); }
+/* Full screen fallback (iPhone can't full-screen page elements): fill the window, landscape-friendly. */
+.mv-frame.mv-full { position: fixed; inset: 0; z-index: 1000; aspect-ratio: auto; border-radius: 0; }
+.mv-frame:fullscreen { aspect-ratio: auto; border-radius: 0; }
+body.mv-noscroll { overflow: hidden; }
+.mv-status.pill { inset: 12px auto auto 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: var(--radius-pill); background: oklch(0% 0 0 / 0.72); pointer-events: none; font-size: var(--text-sm); white-space: nowrap; }
+.mv-status.pill .spin { width: 14px; height: 14px; border-width: 2px; }

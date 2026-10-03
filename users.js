@@ -2,6 +2,7 @@
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 
 export const GENDERS = ['woman', 'man', 'nonbinary', 'unsaid'];
+export const SUBS = ['', 'en', 'fr', 'es', 'pt', 'ar', 'yo', 'ig', 'ha', 'sw'];
 const USERNAME = /^[A-Za-z0-9_.]{3,20}$/;
 
 /** `store` is the data store (store.js); `db` was loaded from it at startup. */
@@ -22,7 +23,7 @@ export function createUsers(store, db = {}) {
   };
 
   const publicUser = (u) => u && ({
-    id: u.id, username: u.username, gender: u.gender,
+    id: u.id, username: u.username, gender: u.gender, subs: u.subs ?? '',
     avatar: u.avatarVer ? `${base}/avatars/${u.id}.jpg?v=${u.avatarVer}` : null,
     lastActive: u.lastActive,
   });
@@ -61,9 +62,11 @@ export function createUsers(store, db = {}) {
 
     logout(token) { delete db.sessions[token]; save(); },
 
-    update(id, { gender, username }) {
+    update(id, { gender, username, subs }) {
       const u = db.users[id];
       if (!u) throw new Error('No account');
+      // Subtitle language for Movie Night ('' = off).
+      if (subs !== undefined) u.subs = SUBS.includes(subs) ? subs : '';
       if (gender !== undefined) u.gender = GENDERS.includes(gender) ? gender : 'unsaid';
       if (username !== undefined && username !== u.username) {
         username = String(username).trim();
