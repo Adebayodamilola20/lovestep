@@ -45,40 +45,45 @@ app.get(['/r/:code', '/play/:game', '/between', '/between/:mode', '/between/c/:i
  * a search costs 100 of the free 10,000 daily units. */
 const YT = 'https://www.googleapis.com/youtube/v3/';
 const SHELVES = [
-  { id: 'new', title: 'New Nollywood', q: 'nollywood full movie 2026 latest', order: 'date' },
-  { id: 'romance', title: 'Romance', q: 'nigerian romantic movie 2026 full movie', order: 'relevance' },
-  { id: 'yoruba', title: 'Yoruba movies', q: 'yoruba movie 2026 full latest', order: 'date' },
-  { id: 'comedy', title: 'Comedy', q: 'nigerian comedy movie 2026 full movie', order: 'relevance' },
-  { id: 'ghana', title: 'Ghana & Africa', q: 'ghanaian movie 2026 full movie latest', order: 'date' },
+  { id: 'trending-ng', title: 'Trending in Nigeria', chart: { regionCode: 'NG' } },
+  { id: 'reality', title: 'Reality TV', q: 'reality show full episode 2026', order: 'relevance' },
+  { id: 'trailers', title: 'New trailers', q: 'official trailer 2026', order: 'relevance' },
+  { id: 'new', title: 'New Nollywood', q: 'nollywood full movie 2026 latest', order: 'date', long: true },
+  { id: 'trending', title: 'Trending worldwide', chart: { regionCode: 'US' } },
+  { id: 'comedy', title: 'Comedy', q: 'comedy skit 2026', order: 'relevance' },
+  { id: 'music', title: 'Music', chart: { regionCode: 'NG', videoCategoryId: '10' } },
 ];
 const ytCache = new Map(); // key -> { at, data }
-async function ytSearch(q, order = 'relevance') {
+const decode = (t) => String(t || '').replace(/&#39;/g, '’').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+const minutes = (iso) => { const [, h = 0, m = 0, sec = 0] = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || '') ?? []; return +h * 60 + +m + (+sec >= 30 ? 1 : 0); };
+const shape = (v) => ({
+  id: v.id, title: decode(v.snippet.title), channel: decode(v.snippet.channelTitle),
+  thumb: v.snippet.thumbnails.high?.url ?? v.snippet.thumbnails.medium?.url,
+  published: v.snippet.publishedAt, mins: v.contentDetails ? minutes(v.contentDetails.duration) : null, views: +(v.statistics?.viewCount ?? 0) || null,
+});
+async function ytGet(path, params) {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) throw new Error('Movie search is not set up yet');
-  const ck = `${order}:${q.toLowerCase()}`, hit = ytCache.get(ck);
+  const ck = path + JSON.stringify(params), hit = ytCache.get(ck);
   if (hit && Date.now() - hit.at < 3 * 3600_000) return hit.data;
-  const params = new URLSearchParams({ part: 'snippet', type: 'video', videoDuration: 'long', videoEmbeddable: 'true', safeSearch: 'moderate', regionCode: 'NG', maxResults: '20', order, q, key });
-  const res = await fetch(YT + 'search?' + params).then((r) => r.json());
+  const res = await fetch(YT + path + '?' + new URLSearchParams({ ...params, key })).then((r) => r.json());
   if (res.error) throw new Error(res.error.message);
+  ytCache.set(ck, { at: Date.now(), data: res });
+  return res;
+}
+/** Search all of YouTube (any length, worldwide). `long` keeps only things over 40 minutes. */
+async function ytSearch(q, { order = 'relevance', long = false } = {}) {
+  const res = await ytGet('search', { part: 'snippet', type: 'video', videoEmbeddable: 'true', safeSearch: 'moderate', maxResults: '25', order, q, ...(long ? { videoDuration: 'long' } : {}) });
   const ids = res.items.map((i) => i.id.videoId).filter(Boolean);
-  // One cheap call for the running times, so cards can say "1h 52m".
-  const det = ids.length ? await fetch(YT + 'videos?' + new URLSearchParams({ part: 'contentDetails,statistics', id: ids.join(','), key })).then((r) => r.json()) : { items: [] };
-  const mins = Object.fromEntries((det.items ?? []).map((v) => {
-    const [, h = 0, m = 0] = /PT(?:(\d+)H)?(?:(\d+)M)?/.exec(v.contentDetails.duration) ?? [];
-    return [v.id, { mins: +h * 60 + +m, views: +(v.statistics?.viewCount ?? 0) }];
-  }));
-  const decode = (t) => t.replace(/&#39;/g, '’').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
-  const data = res.items.filter((i) => i.id.videoId && (mins[i.id.videoId]?.mins ?? 0) >= 40).map((i) => ({
-    id: i.id.videoId,
-    title: decode(i.snippet.title),
-    channel: decode(i.snippet.channelTitle),
-    thumb: i.snippet.thumbnails.high?.url ?? i.snippet.thumbnails.medium?.url,
-    published: i.snippet.publishedAt,
-    mins: mins[i.id.videoId]?.mins ?? null,
-    views: mins[i.id.videoId]?.views ?? null,
-  }));
-  ytCache.set(ck, { at: Date.now(), data });
-  return data;
+  if (!ids.length) return [];
+  // One cheap call (1 unit) for running times and views.
+  const det = await ytGet('videos', { part: 'snippet,contentDetails,statistics', id: ids.join(',') });
+  return det.items.map(shape).filter((v) => !long || v.mins >= 40);
+}
+/** YouTube's own charts: trending videos for a country (1 unit). */
+async function ytChart({ regionCode, videoCategoryId }) {
+  const res = await ytGet('videos', { part: 'snippet,contentDetails,statistics', chart: 'mostPopular', regionCode, maxResults: '25', ...(videoCategoryId ? { videoCategoryId } : {}) });
+  return res.items.map(shape);
 }
 const corsOrigins = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
 app.use('/api', (req, res, next) => {
@@ -88,14 +93,14 @@ app.use('/api', (req, res, next) => {
 });
 app.get('/api/movies/shelves', async (_req, res) => {
   try {
-    const shelves = await Promise.all(SHELVES.map(async (sh) => ({ id: sh.id, title: sh.title, items: await ytSearch(sh.q, sh.order) })));
+    const shelves = await Promise.all(SHELVES.map(async (sh) => ({ id: sh.id, title: sh.title, items: await (sh.chart ? ytChart(sh.chart) : ytSearch(sh.q, sh)).catch(() => []) })));
     res.json({ shelves: shelves.filter((s) => s.items.length) });
   } catch (e) { res.status(503).json({ error: e.message }); }
 });
 app.get('/api/movies/search', async (req, res) => {
   const q = String(req.query.q || '').trim().slice(0, 80);
   if (q.length < 2) return res.json({ items: [] });
-  try { res.json({ items: await ytSearch(`${q} full movie`) }); } catch (e) { res.status(503).json({ error: e.message }); }
+  try { res.json({ items: await ytSearch(q) }); } catch (e) { res.status(503).json({ error: e.message }); }
 });
 
 // Where the page finds this server. Served here it's "same address"; the Vercel build writes its own copy.

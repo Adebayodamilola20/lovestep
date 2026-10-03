@@ -6,7 +6,7 @@ Two-player online games you play with a friend from a link, like iMessage games,
 
 **Quiz Duel:** live trivia across 8 categories (about 40 questions each; Music covers 2024 to now). The host picks 5 to 20 questions and 10 to 30 seconds each. Every right answer is a point, and a rematch avoids questions the pair has already had. The server holds the answers and the clock; leaving the app for more than 5 seconds forfeits.
 
-**Games:** 8 Ball Pool, Darts, Archery, Cup Pong, Basketball (all 3D) · Whot · Chess · Checkers · Four in a Row · Sea Battle · Reversi · Dots & Boxes · Mancala · Gomoku · Tic-Tac-Toe · Rock Paper Scissors
+**Games:** 8 Ball Pool, Ludo, Darts, Archery, Cup Pong, Basketball (all 3D) · Whot · Chess · Checkers · Four in a Row · Sea Battle · Reversi · Dots & Boxes · Mancala · Gomoku · Tic-Tac-Toe · Rock Paper Scissors
 
 **Accounts:** username + password (scrypt-hashed), profile photo, gender. Head-to-head records and presence ("was here 2h ago") are kept in `data/`.
 

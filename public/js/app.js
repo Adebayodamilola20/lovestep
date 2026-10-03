@@ -88,7 +88,7 @@ async function startGame(id, options) {
 }
 
 /* ---------- lobby ---------- */
-const SPANS = { pool: 'span-2x2', whot: 'span-2x1', chess: 'span-2x1' };
+const SPANS = { ludo: 'span-2x2', pool: 'span-2x2', whot: 'span-2x1', chess: 'span-2x1' };
 
 /** A believable mid-game position for each lobby preview, played with the real rules. */
 function sample(id) {
@@ -107,6 +107,7 @@ function sample(id) {
       case 'dots': [['h', 0, 0], ['v', 0, 0], ['h', 1, 0], ['v', 0, 1], ['h', 2, 2], ['v', 1, 3], ['h', 3, 1], ['v', 2, 2], ['h', 0, 3]].forEach(([kind, r, c]) => P(s.turn, { kind, r, c })); break;
       case 'mancala': for (let k = 0; k < 5; k++) { const p = s.turn; const pit = [0, 1, 2, 3, 4, 5].find((x) => s.pits[p * 7 + ((x + k) % 6)] > 0); P(p, { pit: (pit + k) % 6 }); } break;
       case 'rps': P(0, { type: 'lock', pick: 0 }); P(1, { type: 'lock', pick: 2 }); break;
+      case 'ludo': for (let k = 0; k < 60 && s.winner == null; k++) { P(s.turn, { type: 'roll' }); if (s.phase === 'move') { const c = g.legal(s, s.turn); P(s.turn, { type: 'move', piece: c[k % c.length] }); } } break;
       case 'darts': [[0, 103, 1], [12, 100, 1], [-40, 150, 1]].forEach(([x, y, v]) => P(0, { type: 'throw', x, y, v })); break;
       case 'battleship': {
         P(0, { type: 'place', ships: g.randomFleet() });

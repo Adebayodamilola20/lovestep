@@ -65,11 +65,11 @@ export function mount(el, ctx) {
       <section class="mv-studio">
         <header class="mv-head">
           <h2>${host ? 'Pick tonight’s film' : `${esc(meta.players[0]?.name ?? 'Your partner')} is picking a film…`}</h2>
-          <p>${host ? 'Full movies, newest first. When you press play it plays on both phones, and either of you can pause or skip.' : 'It starts on your screen the moment they pick. Either of you can pause or skip.'}</p>
+          <p>${host ? 'Movies, reality shows, music, anything on YouTube. When you press play it plays on both phones, and either of you can pause or skip.' : 'It starts on your screen the moment they pick. Either of you can pause or skip.'}</p>
         </header>
         <form class="mv-search" role="search">
           <i class="ph ph-magnifying-glass"></i>
-          <input class="field" id="mv-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Search a title or actor">
+          <input class="field" id="mv-q" type="search" enterkeyhint="search" autocomplete="off" placeholder="Search anything on YouTube">
           <button class="btn btn-primary" type="submit">Search</button>
         </form>
         <div class="mv-results" aria-live="polite"></div>
@@ -80,7 +80,7 @@ export function mount(el, ctx) {
             <div><input class="field" id="mv-yt-url" inputmode="url" autocomplete="off" placeholder="https://youtu.be/…"><button class="btn" type="submit">Watch</button></div>
             <p class="mv-err" role="alert"></p>
           </form>` : ''}
-        <p class="mv-note">Films come from the official YouTube channels that released them.</p>
+        <p class="mv-note">Everything plays from YouTube. A few videos are set by their owners to play only on YouTube itself.</p>
       </section>`;
     bindTop();
     const shelvesEl = root.querySelector('.mv-shelves'), resultsEl = root.querySelector('.mv-results');
@@ -90,7 +90,7 @@ export function mount(el, ctx) {
       shelvesEl.innerHTML = (hero ? `
         <button class="mv-hero" type="button" data-yt="${esc(hero.id)}" data-title="${esc(tidy(hero.title))}" ${isHost() ? '' : 'disabled'}>
           <img src="${esc(hero.thumb.replace('hqdefault', 'maxresdefault'))}" alt="" onerror="this.src='${esc(hero.thumb)}'">
-          <span class="mv-hero-copy"><small>New today · ${esc(hero.channel)}</small><b>${esc(tidy(hero.title))}</b>
+          <span class="mv-hero-copy"><small>Trending · ${esc(hero.channel)}</small><b>${esc(tidy(hero.title))}</b>
             <span class="mv-hero-cta">${isHost() ? '<i class="ph-fill ph-play"></i>Watch together' : '<i class="ph ph-hourglass"></i>Waiting for the host to pick'}</span></span>
         </button>` : '') + data.shelves.map((sh) => `
         <section class="mv-shelf"><h3>${esc(sh.title)}</h3><div class="mv-row-scroll">${sh.items.map(card).join('')}</div></section>`).join('');
@@ -105,7 +105,7 @@ export function mount(el, ctx) {
       const d = await api('/api/movies/search?q=' + encodeURIComponent(q)).catch(() => ({ error: 'no connection' }));
       resultsEl.innerHTML = d.error ? `<p class="mv-err">${esc(d.error)}</p>`
         : d.items.length ? `<section class="mv-shelf"><h3>Results for “${esc(q)}”</h3><div class="mv-grid">${d.items.map(card).join('')}</div></section>`
-        : `<p class="mv-err">No full movies found for “${esc(q)}”. Try an actor’s name.</p>`;
+        : `<p class="mv-err">Nothing found for “${esc(q)}”. Try different words.</p>`;
     });
     root.querySelector('.mv-yt')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -127,7 +127,7 @@ export function mount(el, ctx) {
 
   function card(m) {
     const title = tidy(m.title);
-    const len = m.mins ? (m.mins >= 60 ? `${Math.floor(m.mins / 60)}h ${m.mins % 60}m` : `${m.mins}m`) : '';
+    const len = m.mins ? (m.mins >= 60 ? `${Math.floor(m.mins / 60)}h ${m.mins % 60}m` : `${m.mins} min`) : '';
     const age = ago(m.published);
     return `<button class="mv-card" type="button" data-yt="${esc(m.id)}" data-title="${esc(title)}" ${isHost() ? '' : 'disabled'}>
       <span class="mv-thumb"><img src="${esc(m.thumb)}" alt="" loading="lazy">${len ? `<i class="num">${len}</i>` : ''}</span>
