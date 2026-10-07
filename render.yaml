@@ -1,4 +1,4 @@
-# The LoveStep game server (accounts, rooms, live play). The website itself is on Vercel.
+# The Stephlia game server (accounts, rooms, live play). The website itself is on Vercel.
 services:
   - type: web
     name: lovestep-api

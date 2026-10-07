@@ -4,6 +4,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypt
 export const GENDERS = ['woman', 'man', 'nonbinary', 'unsaid'];
 export const SUBS = ['', 'en', 'fr', 'es', 'pt', 'ar', 'yo', 'ig', 'ha', 'sw'];
 const USERNAME = /^[A-Za-z0-9_.]{3,20}$/;
+const DOWN = 'Service unavailable. Please try again later.';
 
 /** `store` is the data store (store.js); `db` was loaded from it at startup. */
 export function createUsers(store, db = {}) {
@@ -15,6 +16,10 @@ export function createUsers(store, db = {}) {
 
   const hash = (password, salt) => scryptSync(password, salt, 64).toString('hex');
   const byName = (name) => Object.values(db.users).find((u) => u.lower === String(name).toLowerCase());
+  const matches = (u, password) => timingSafeEqual(Buffer.from(hash(password, u.salt), 'hex'), Buffer.from(u.hash, 'hex'));
+  // BLOCKED_USERS (comma-separated usernames) can't sign in: they only ever see the "unavailable" message.
+  const blockedNames = new Set((process.env.BLOCKED_USERS || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
+  const blocked = (name) => blockedNames.has(String(name || '').trim().toLowerCase());
   const issue = (id) => {
     const token = randomBytes(24).toString('hex');
     db.sessions[token] = { id, at: Date.now() };
@@ -35,10 +40,10 @@ export function createUsers(store, db = {}) {
 
     signup({ username, password, gender }) {
       username = String(username || '').trim();
+      if (blocked(username)) throw new Error(DOWN);
       if (!USERNAME.test(username)) throw new Error('Usernames are 3 to 20 letters, numbers, dots or underscores.');
       if (byName(username)) throw new Error('That username is taken.');
-      // TESTING: passwords switched off for now. Put this check back when passwords return.
-      // if (String(password || '').length < 6) throw new Error('Use at least 6 characters for your password.');
+      if (String(password || '').length < 6) throw new Error('Use at least 6 characters for your password.');
       if (!GENDERS.includes(gender)) gender = 'unsaid';
       const salt = randomBytes(16).toString('hex');
       const u = { id: randomUUID(), username, lower: username.toLowerCase(), salt, hash: hash(String(password), salt), gender, avatarVer: 0, created: Date.now(), lastActive: Date.now() };
@@ -48,17 +53,23 @@ export function createUsers(store, db = {}) {
     },
 
     login({ username, password }) {
+      if (blocked(username)) throw new Error(DOWN);
       const u = byName(String(username || '').trim());
-      // TESTING: passwords switched off, the username alone logs in. Restore these two lines when passwords return.
-      // const ok = u && timingSafeEqual(Buffer.from(hash(String(password || ''), u.salt), 'hex'), Buffer.from(u.hash, 'hex'));
-      // if (!ok) throw new Error('That username and password don’t match.');
-      if (!u) throw new Error('No account with that username.');
+      password = String(password || '');
+      if (u && matches(u, '') && password.length >= 6) {
+        // Accounts made while passwords were switched off have none yet: the first one typed becomes theirs.
+        u.salt = randomBytes(16).toString('hex');
+        u.hash = hash(password, u.salt);
+        save();
+      }
+      if (!u || !matches(u, password)) throw new Error('That username and password don’t match.');
       return { user: publicUser(u), session: issue(u.id) };
     },
 
     bySession(token) {
       const s = db.sessions[String(token || '')];
-      return s ? db.users[s.id] ?? null : null;
+      const u = s ? db.users[s.id] ?? null : null;
+      return u && !blocked(u.username) ? u : null;
     },
 
     logout(token) { delete db.sessions[token]; save(); },

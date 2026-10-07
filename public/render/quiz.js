@@ -65,7 +65,7 @@ export function mount(el, ctx) {
     }).join('');
 
     let banner = '';
-    if (s.phase === 'ready') banner = `<div class="qz-ready"><b class="qz-count num" id="qz-count">3</b><p><i class="ph-fill ph-warning-circle"></i>Stay on this screen. Leaving LoveStep or switching tabs for more than ${AWAY_MS / 1000} seconds gives ${esc(opp.name)} the win.</p></div>`;
+    if (s.phase === 'ready') banner = `<div class="qz-ready"><b class="qz-count num" id="qz-count">3</b><p><i class="ph-fill ph-warning-circle"></i>Stay on this screen. Leaving Stephlia or switching tabs for more than ${AWAY_MS / 1000} seconds gives ${esc(opp.name)} the win.</p></div>`;
     else if (s.phase === 'ask') banner = `<p class="qz-status">${mine ? `<i class="ph-fill ph-lock-simple"></i>Locked in. ${theirs ? `${esc(opp.name)} locked in too.` : `Waiting for ${esc(opp.name)}…`}` : theirs ? `${avatarHtml(opp, 'xs')}${esc(opp.name)} has locked in. Hurry.` : 'Every right answer is a point.'}</p>`;
     else if (s.phase === 'pause') banner = `<div class="qz-suspense"><span class="flip">${avatarHtml(meta.players[me()], 'md')}</span><span class="qz-dots"><i></i><i></i><i></i></span><span class="flip">${avatarHtml(opp, 'md')}</span></div>`;
     else if (open) {

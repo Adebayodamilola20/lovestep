@@ -794,7 +794,7 @@ function openSettings() {
       <fieldset class="gender"><legend class="label">Gender</legend><div class="chips">${GENDERS.map(([v, l]) => `<button type="button" class="chip-g${my.gender === v ? ' on' : ''}" data-g="${v}">${l}</button>`).join('')}</div></fieldset>
       <div><label class="label" for="st-phone">Phone number (for calls without data)</label>
         <input class="field" id="st-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+234 801 234 5678" value="${esc(my.phone ?? '')}">
-        <small class="hint">Only people you play with can see it. When a LoveStep call can’t connect, they get a button to ring this number over normal phone signal.</small></div>
+        <small class="hint">Only people you play with can see it. When a Stephlia call can’t connect, they get a button to ring this number over normal phone signal.</small></div>
       <div><label class="label" for="st-subs">Movie subtitles</label>
         <select class="field" id="st-subs">${SUBTITLES.map(([v, l]) => `<option value="${v}"${(my.subs ?? '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
         <small class="hint">Used in Movie Night when the film has captions. You can also switch them with the CC button while watching.</small></div>

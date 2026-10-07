@@ -7,6 +7,18 @@ if (!api) console.warn('API_URL is not set: the page will look for the game serv
 
 rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist', { recursive: true });
+
+// OFFLINE=1 retires a deployment: every address on it shows only a "service unavailable" page.
+if (process.env.OFFLINE) {
+  const down = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>503 Service Unavailable</title>
+<style>body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#fff;color:#222;font:16px/1.5 system-ui,sans-serif;text-align:center;padding:16px}h1{font-size:22px;margin:0 0 8px}p{margin:0;color:#666}</style></head>
+<body><div><h1>503 Service Unavailable</h1><p>The server is temporarily unable to handle your request.</p></div></body></html>\n`;
+  writeFileSync('dist/index.html', down);
+  writeFileSync('dist/404.html', down);
+  console.log('Built offline page');
+  process.exit(0);
+}
+
 cpSync('public', 'dist', { recursive: true });
 cpSync('shared', 'dist/shared', { recursive: true });
 

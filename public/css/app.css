@@ -308,7 +308,7 @@ dialog::backdrop { background: var(--color-scrim); backdrop-filter: blur(6px); }
 .status.win strong { animation: winpop 600ms var(--ease-out); }
 @keyframes winpop { from { transform: scale(0.92); opacity: 0; } }
 
-/* ---------- LoveStep wordmark ---------- */
+/* ---------- Stephlia wordmark ---------- */
 .ls-logo { display: inline-flex; align-items: center; gap: 9px; }
 .ls-icon { width: 32px; height: 32px; flex: none; transform: rotate(-4deg); transition: transform var(--dur-long) var(--ease-out); }
 .ls-word { display: inline-flex; align-items: baseline; font: 720 1.25rem/1 var(--font-display); letter-spacing: -0.045em; }

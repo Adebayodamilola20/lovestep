@@ -97,7 +97,7 @@ export class Calls {
     dlg.innerHTML = `
       <form method="dialog" class="sheet-head"><h2>Call</h2><button class="btn btn-quiet btn-icon" aria-label="Close"><i class="ph ph-x"></i></button></form>
       <div class="sheet-body"><ul>${list.map((p) => `
-        <li><button type="button" data-id="${esc(p.id)}">${avatarHtml(p, 'md')}<span><b>${esc(p.username)}</b><small>${p.online ? 'Online now' : 'Not on LoveStep right now'}</small></span><i class="ph-fill ph-phone"></i></button></li>`).join('')}</ul></div>`;
+        <li><button type="button" data-id="${esc(p.id)}">${avatarHtml(p, 'md')}<span><b>${esc(p.username)}</b><small>${p.online ? 'Online now' : 'Not on Stephlia right now'}</small></span><i class="ph-fill ph-phone"></i></button></li>`).join('')}</ul></div>`;
     document.body.append(dlg);
     dlg.addEventListener('close', () => dlg.remove());
     dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
@@ -115,7 +115,7 @@ export class Calls {
     const res = await new Promise((r) => this.socket.timeout(8000).emit('call:invite', { to: person.id, callId: this.call?.id }, (err, v) => r(err ? { error: 'timeout' } : v)));
     if (!this.call) return;
     if (this.call && res?.phone) this.call.phone = res.phone;
-    if (res?.error === 'offline') return this.finish(`${person.username} isn’t on LoveStep right now, so the call can’t reach them. We left them a missed call in your chat.`, false, true);
+    if (res?.error === 'offline') return this.finish(`${person.username} isn’t on Stephlia right now, so the call can’t reach them. We left them a missed call in your chat.`, false, true);
     if (res?.error) return this.finish(res.error === 'timeout' ? 'Couldn’t reach the server. Check your connection.' : res.error);
     this.set('ringing');
     this.tone = ringer('out');

@@ -1,4 +1,4 @@
-# LoveStep
+# Stephlia
 
 Two-player online games you play with a friend from a link, like iMessage games, but in the browser.
 

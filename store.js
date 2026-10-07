@@ -1,4 +1,4 @@
-// Where LoveStep keeps its data. With MONGODB_URI set (production) everything lives in MongoDB,
+// Where Stephlia keeps its data. With MONGODB_URI set (production) everything lives in MongoDB,
 // so restarts and redeploys never lose accounts, photos, records or open games.
 // Without it (local dev) the same data is kept as files in ./data.
 import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';

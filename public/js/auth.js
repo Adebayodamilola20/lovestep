@@ -72,12 +72,11 @@ export function showAuth(app, { emit, LOGO, invite }) {
               <label class="label" for="au-name">Username</label>
               <input class="field" id="au-name" name="username" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="20" required value="${esc(typed.username)}">
             </div>
-            <!-- TESTING: password field switched off for now. Put it back when passwords return.
             <div>
               <label class="label" for="au-pass">Password</label>
               <input class="field" id="au-pass" name="password" type="password" autocomplete="${mode === 'signup' ? 'new-password' : 'current-password'}" minlength="6" required value="${esc(typed.password)}">
+              ${mode === 'login' ? '<small class="hint">No password yet? The one you type now becomes yours.</small>' : ''}
             </div>
-            -->
             ${mode === 'signup' ? `
               <fieldset class="gender">
                 <legend class="label">Gender</legend>
@@ -101,11 +100,8 @@ export function showAuth(app, { emit, LOGO, invite }) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const f = new FormData(form);
-        // TESTING: passwords switched off. Restore the two commented lines when passwords return.
-        // const username = String(f.get('username')).trim(), password = String(f.get('password'));
-        // if (!username || !password) { err.textContent = 'Fill in your username and password.'; return; }
-        const username = String(f.get('username')).trim(), password = '';
-        if (!username) { err.textContent = 'Fill in your username.'; return; }
+        const username = String(f.get('username')).trim(), password = String(f.get('password'));
+        if (!username || !password) { err.textContent = 'Fill in your username and password.'; return; }
         go.disabled = true;
         go.textContent = mode === 'signup' ? 'Creating…' : 'Logging in…';
         const res = await emit(mode, { username, password, gender });
