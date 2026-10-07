@@ -20,8 +20,18 @@ try {
   }
 } catch { /* no .env: fine */ }
 const store = await createStore(root + 'data');
+// A fresh start: set RESET_PROGRESS to a new value and the next boot wipes every score and every room
+// (quizzes, Between Us, games in progress), once. Accounts and chats stay.
+const meta = await store.load('meta', {});
+const fresh = !!process.env.RESET_PROGRESS && meta.reset !== process.env.RESET_PROGRESS;
+if (fresh) {
+  store.save('records', {});
+  store.save('rooms', []);
+  store.save('meta', { ...meta, reset: process.env.RESET_PROGRESS });
+  console.log('Progress reset:', process.env.RESET_PROGRESS);
+}
 const users = createUsers(store, await store.load('users', {}));
-const records = createRecords(store, await store.load('records', {}));
+const records = createRecords(store, fresh ? {} : await store.load('records', {}));
 // One conversation per couple, shared by the home page and every game: "uidA|uidB" -> messages.
 const threads = await store.load('threads', {});
 const threadKey = (a, b) => [a, b].sort().join('|');
@@ -129,7 +139,7 @@ function saveRooms() {
   store.save('rooms', () => JSON.parse(JSON.stringify([...rooms.values()], (k, v) => (SKIP.has(k) ? undefined : v))));
 }
 async function loadRooms() {
-  for (const room of await store.load('rooms', [])) {
+  for (const room of fresh ? [] : await store.load('rooms', [])) {
     if (!games[room.game]) continue; // a game that has since been removed
     // Nobody is connected after a restart; each player is reseated when their page reconnects.
     room.players.forEach((p) => Object.assign(p, { sid: null, connected: false, net: 'good' }));
