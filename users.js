@@ -1,5 +1,5 @@
 // Accounts: username + password, a profile photo and gender. Sessions keep you signed in per device.
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, randomUUID, scryptSync } from 'node:crypto';
 
 export const GENDERS = ['woman', 'man', 'nonbinary', 'unsaid'];
 export const SUBS = ['', 'en', 'fr', 'es', 'pt', 'ar', 'yo', 'ig', 'ha', 'sw'];
@@ -16,7 +16,6 @@ export function createUsers(store, db = {}) {
 
   const hash = (password, salt) => scryptSync(password, salt, 64).toString('hex');
   const byName = (name) => Object.values(db.users).find((u) => u.lower === String(name).toLowerCase());
-  const matches = (u, password) => timingSafeEqual(Buffer.from(hash(password, u.salt), 'hex'), Buffer.from(u.hash, 'hex'));
   // BLOCKED_USERS (comma-separated usernames) can't sign in: they only ever see the "unavailable" message.
   const blockedNames = new Set((process.env.BLOCKED_USERS || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
   const blocked = (name) => blockedNames.has(String(name || '').trim().toLowerCase());
@@ -43,7 +42,7 @@ export function createUsers(store, db = {}) {
       if (blocked(username)) throw new Error(DOWN);
       if (!USERNAME.test(username)) throw new Error('Usernames are 3 to 20 letters, numbers, dots or underscores.');
       if (byName(username)) throw new Error('That username is taken.');
-      if (String(password || '').length < 6) throw new Error('Use at least 6 characters for your password.');
+      // Passwords are off: the username alone signs up and logs in.
       if (!GENDERS.includes(gender)) gender = 'unsaid';
       const salt = randomBytes(16).toString('hex');
       const u = { id: randomUUID(), username, lower: username.toLowerCase(), salt, hash: hash(String(password), salt), gender, avatarVer: 0, created: Date.now(), lastActive: Date.now() };
@@ -55,14 +54,7 @@ export function createUsers(store, db = {}) {
     login({ username, password }) {
       if (blocked(username)) throw new Error(DOWN);
       const u = byName(String(username || '').trim());
-      password = String(password || '');
-      if (u && matches(u, '') && password.length >= 6) {
-        // Accounts made while passwords were switched off have none yet: the first one typed becomes theirs.
-        u.salt = randomBytes(16).toString('hex');
-        u.hash = hash(password, u.salt);
-        save();
-      }
-      if (!u || !matches(u, password)) throw new Error('That username and password don’t match.');
+      if (!u) throw new Error('No account with that username.');
       return { user: publicUser(u), session: issue(u.id) };
     },
 
