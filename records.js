@@ -15,6 +15,8 @@ export function createRecords(store, db = {}) {
     },
 
 
+    knows: (a, b) => !!db.pairs[key(a, b)],
+
     /** winner: a token, or null for a draw. */
     result(a, b, game, winner) {
       const p = pair(a, b);

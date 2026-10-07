@@ -282,7 +282,9 @@ io.on('connection', (socket) => {
   socket.on('me', (...args) => {
     const cb = reply(args);
     if (!user) return cb({ auth: false });
-    const people = records.list(user.id).map((r) => ({ ...r, person: { ...personOf(r.id), phone: users.phoneOf(r.id) } })).filter((r) => r.person.id);
+    // Chat and call are there from day one, without playing a game first.
+    for (const id of users.others(user.id)) if (!records.knows(user.id, id)) records.meet(user.id, id);
+    const people = records.list(user.id).filter((r) => !users.isBlocked(r.id)).map((r) => ({ ...r, person: { ...personOf(r.id), phone: users.phoneOf(r.id) } })).filter((r) => r.person.id);
     cb({ user: { ...personOf(user.id), phone: users.phoneOf(user.id) }, partner: people[0]?.person ?? null, people });
   });
 

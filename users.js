@@ -35,6 +35,9 @@ export function createUsers(store, db = {}) {
   return {
     publicUser,
     get: (id) => db.users[id] ?? null,
+    /** Everyone else who can sign in: on a site this small, they're all your contacts from the start. */
+    others: (id) => Object.values(db.users).filter((u) => u.id !== id && !blocked(u.username)).map((u) => u.id),
+    isBlocked: (id) => !db.users[id] || blocked(db.users[id].username),
     phoneOf: (id) => db.users[id]?.phone || null,
 
     signup({ username, password, gender }) {
