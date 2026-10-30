@@ -568,4 +568,4 @@ await loadRooms();
 for (const room of rooms.values()) arm(room);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Stephlia running on http://localhost:${PORT}`));
+server.listen(PORT, () => console.log(`Stephen’s Lily running on http://localhost:${PORT}`));
