@@ -21,19 +21,41 @@ try {
 } catch { /* no .env: fine */ }
 const store = await createStore(root + 'data');
 // A fresh start: set RESET_PROGRESS to a new value and the next boot wipes every score and every room
-// (quizzes, Between Us, games in progress), once. Accounts and chats stay.
+// (quizzes, Between Us, games in progress), once. Accounts and chats stay, unless RESET_KEEP is set.
 const meta = await store.load('meta', {});
-const fresh = !!process.env.RESET_PROGRESS && meta.reset !== process.env.RESET_PROGRESS;
+let fresh = !!process.env.RESET_PROGRESS && meta.reset !== process.env.RESET_PROGRESS;
+const userDb = await store.load('users', {});
+let threadDb = await store.load('threads', {});
+// With RESET_KEEP (a username) the fresh start also removes every other account, with its photo,
+// sessions and chats. If no account has that username, nothing at all is reset.
+const keep = (process.env.RESET_KEEP || '').trim().toLowerCase();
+if (fresh && keep) {
+  const all = Object.values(userDb.users ?? {});
+  const kept = all.find((u) => u.lower === keep);
+  if (!kept) {
+    console.error(`RESET_KEEP: no account named "${keep}" (accounts: ${all.map((u) => u.username).join(', ')}). Nothing was reset.`);
+    fresh = false;
+  } else {
+    const gone = all.filter((u) => u !== kept);
+    for (const u of gone) await store.delBlob(`avatar-${u.id}.jpg`);
+    userDb.users = { [kept.id]: kept };
+    userDb.sessions = Object.fromEntries(Object.entries(userDb.sessions ?? {}).filter(([, s]) => s.id === kept.id));
+    threadDb = {}; // every chat was with someone who is now gone
+    store.save('users', userDb);
+    store.save('threads', threadDb);
+    console.log(`Accounts removed: ${gone.map((u) => u.username).join(', ') || 'none'}. Kept: ${kept.username}`);
+  }
+}
 if (fresh) {
   store.save('records', {});
   store.save('rooms', []);
   store.save('meta', { ...meta, reset: process.env.RESET_PROGRESS });
   console.log('Progress reset:', process.env.RESET_PROGRESS);
 }
-const users = createUsers(store, await store.load('users', {}));
+const users = createUsers(store, userDb);
 const records = createRecords(store, fresh ? {} : await store.load('records', {}));
 // One conversation per couple, shared by the home page and every game: "uidA|uidB" -> messages.
-const threads = await store.load('threads', {});
+const threads = threadDb;
 const threadKey = (a, b) => [a, b].sort().join('|');
 const THREAD_MAX = 300;
 
